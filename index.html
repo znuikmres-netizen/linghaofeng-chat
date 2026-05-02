@@ -551,10 +551,13 @@
       <small>免費註冊：<a href="https://openrouter.ai/" target="_blank">openrouter.ai</a>，有許多免費模型可用。</small>
       <label>模型</label>
       <select id="openrouter-model">
-        <option value="deepseek/deepseek-chat-v3.1:free">DeepSeek V3.1（免費）</option>
-        <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B（免費）</option>
-        <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash（免費）</option>
-        <option value="anthropic/claude-sonnet-4">Claude Sonnet 4（付費）</option>
+        <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 405B（免費・推薦角色扮演）</option>
+        <option value="qwen/qwen3-next-80b-a3b-instruct:free">Qwen3 80B（免費・中文佳）</option>
+        <option value="z-ai/glm-4.5-air:free">GLM 4.5 Air（免費・中文）</option>
+        <option value="minimax/minimax-m2.5:free">MiniMax M2.5（免費・中文）</option>
+        <option value="google/gemma-3-27b-it:free">Gemma 3 27B（免費）</option>
+        <option value="openai/gpt-oss-120b:free">GPT-OSS 120B（免費）</option>
+        <option value="anthropic/claude-sonnet-4.5">Claude Sonnet 4.5（付費）</option>
       </select>
     </div>
 
@@ -631,7 +634,7 @@ let isLoading = false;
 let config = {
   provider: localStorage.getItem('provider') || 'pollinations',
   openrouterKey: localStorage.getItem('openrouter_key') || '',
-  openrouterModel: localStorage.getItem('openrouter_model') || 'deepseek/deepseek-chat-v3.1:free',
+  openrouterModel: localStorage.getItem('openrouter_model') || 'nousresearch/hermes-3-llama-3.1-405b:free',
   anthropicKey: localStorage.getItem('anthropic_key') || ''
 };
 
