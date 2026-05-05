@@ -16,8 +16,8 @@
     height: 100%;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
-    background: #0a0612;
-    color: #fff;
+    background: #EFEAE2;
+    color: #111B21;
   }
 
   #app {
@@ -25,7 +25,7 @@
     max-width: 480px;
     height: 100vh;
     margin: 0 auto;
-    background: linear-gradient(180deg, #0B141A 0%, #0B141A 50%, #0B141A 100%);
+    background: linear-gradient(180deg, #EFEAE2 0%, #EFEAE2 50%, #EFEAE2 100%);
     display: flex;
     flex-direction: column;
     position: relative;
@@ -38,13 +38,13 @@
     padding-bottom: 14px;
     padding-left: 16px;
     padding-right: 16px;
-    background: linear-gradient(180deg, rgba(31, 44, 52, 0.95), rgba(15, 25, 30, 0.85));
+    background: linear-gradient(180deg, rgba(0, 128, 105, 0.98), rgba(0, 105, 87, 0.85));
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     display: flex;
     align-items: center;
     gap: 12px;
-    border-bottom: 1px solid rgba(134, 150, 160, 0.15);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
     z-index: 10;
   }
 
@@ -52,8 +52,8 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: rgba(0, 168, 132, 0.15);
-    color: #00A884;
+    background: rgba(255, 255, 255, 0.18);
+    color: #FFFFFF;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -63,12 +63,13 @@
     transition: background 0.2s;
   }
 
-  .back-btn { font-size: 24px; background: transparent; }
-  .back-btn:active { background: rgba(0, 168, 132, 0.15); }
+  .back-btn { font-size: 24px; background: transparent; color: #FFFFFF; }
+  .back-btn:active { background: rgba(255, 255, 255, 0.2); }
 
   .header-info {
     flex: 1;
     min-width: 0;
+    color: #FFFFFF;
   }
 
   .header-info .name {
@@ -77,23 +78,24 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    color: #FFFFFF;
   }
 
   .verified {
     width: 14px;
     height: 14px;
-    background: #00A884;
+    background: #FFFFFF;
     border-radius: 50%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-size: 9px;
-    color: #fff;
+    color: #008069;
   }
 
   .header-info .status {
     font-size: 12px;
-    color: #8696A0;
+    color: rgba(255, 255, 255, 0.85);
     margin-top: 2px;
   }
 
@@ -142,7 +144,7 @@
     height: 10px;
     background: #2bd17e;
     border-radius: 50%;
-    border: 2px solid #0B141A;
+    border: 2px solid #EFEAE2;
     z-index: 3;
   }
 
@@ -162,22 +164,19 @@
   /* ====== 首頁 ====== */
   .home-header {
     padding: calc(env(safe-area-inset-top, 0px) + 18px) 20px 12px;
-    background: linear-gradient(180deg, rgba(31, 44, 52, 0.95), rgba(15, 25, 30, 0.85));
-    border-bottom: 1px solid rgba(134, 150, 160, 0.15);
+    background: linear-gradient(180deg, rgba(0, 128, 105, 0.98), rgba(0, 105, 87, 0.85));
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   .home-header h1 {
     font-size: 26px;
-    background: linear-gradient(135deg, #00A884, #25D366);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #FFFFFF;
     font-weight: 700;
     letter-spacing: 0.5px;
   }
 
   .home-header p {
-    color: #8696A0;
+    color: rgba(255, 255, 255, 0.85);
     font-size: 13px;
     margin-top: 4px;
   }
@@ -198,7 +197,7 @@
   .character-list::-webkit-scrollbar { width: 0; }
 
   .section-label {
-    color: #54656F;
+    color: #8696A0;
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 1px;
@@ -207,9 +206,9 @@
   }
 
   .character-card {
-    background: linear-gradient(135deg, rgba(31, 44, 52, 0.5), rgba(40, 20, 55, 0.5));
-    border: 1px solid rgba(0, 168, 132, 0.18);
-    border-radius: 18px;
+    background: #FFFFFF;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 14px;
     padding: 14px;
     margin-bottom: 10px;
     display: flex;
@@ -218,6 +217,7 @@
     cursor: pointer;
     transition: all 0.25s;
     animation: cardIn 0.4s ease backwards;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   @keyframes cardIn {
@@ -231,7 +231,7 @@
 
   .character-card:active {
     transform: scale(0.98);
-    background: linear-gradient(135deg, rgba(36, 49, 58, 0.6), rgba(20, 33, 41, 0.6));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(245, 245, 245, 1));
   }
 
   .character-card .avatar {
@@ -258,7 +258,7 @@
   }
 
   .character-card .top .age {
-    color: #8696A0;
+    color: #667781;
     font-size: 12px;
   }
 
@@ -274,7 +274,7 @@
   }
 
   .character-card .tagline {
-    color: #AEBAC1;
+    color: #667781;
     font-size: 12.5px;
     line-height: 1.45;
     overflow: hidden;
@@ -284,7 +284,7 @@
   }
 
   .character-card .arrow {
-    color: #54656F;
+    color: #8696A0;
     font-size: 18px;
     flex-shrink: 0;
   }
@@ -302,7 +302,7 @@
   .date-divider {
     text-align: center;
     margin: 12px 0;
-    color: #54656F;
+    color: #8696A0;
     font-size: 11px;
     font-weight: 500;
   }
@@ -353,36 +353,38 @@
   }
 
   .message.bot .bubble {
-    background: linear-gradient(135deg, rgba(31, 44, 52, 0.7), rgba(15, 25, 30, 0.7));
-    border: 1px solid rgba(0, 168, 132, 0.15);
+    background: #FFFFFF;
+    border: 1px solid rgba(0, 0, 0, 0.04);
     border-top-left-radius: 4px;
-    color: #E9EDEF;
+    color: #111B21;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   }
 
   .message.user .bubble {
-    background: linear-gradient(135deg, #00A884, #015E48);
+    background: #D9FDD3;
     border-top-right-radius: 4px;
-    color: #fff;
-    box-shadow: 0 2px 12px rgba(0, 168, 132, 0.25);
+    color: #111B21;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   }
 
   .narration {
-    color: #8696A0;
+    color: #667781;
     font-style: italic;
     font-size: 13.5px;
   }
-  .message.user .narration { color: rgba(255, 255, 255, 0.85); }
+  .message.user .narration { color: #54656F; }
 
   /* 打字指示器 */
   .typing {
     display: flex;
     gap: 4px;
     padding: 14px 18px;
-    background: linear-gradient(135deg, rgba(31, 44, 52, 0.7), rgba(15, 25, 30, 0.7));
-    border: 1px solid rgba(0, 168, 132, 0.15);
+    background: #FFFFFF;
+    border: 1px solid rgba(0, 0, 0, 0.04);
     border-radius: 18px;
     border-top-left-radius: 4px;
     width: fit-content;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   }
   .typing span {
     width: 7px;
@@ -404,7 +406,7 @@
     display: flex;
     gap: 8px;
     padding: 8px 12px 4px;
-    background: rgba(11, 20, 26, 0.85);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
   }
 
@@ -431,7 +433,7 @@
   .input-area {
     padding: 8px 12px max(env(safe-area-inset-bottom, 0px), 12px);
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
-    background: rgba(11, 20, 26, 0.95);
+    background: rgba(255, 255, 255, 0.98);
     backdrop-filter: blur(20px);
     border-top: 1px solid rgba(0, 168, 132, 0.1);
   }
@@ -440,19 +442,20 @@
     display: flex;
     align-items: flex-end;
     gap: 8px;
-    background: rgba(31, 44, 52, 0.5);
-    border: 1px solid rgba(0, 168, 132, 0.2);
+    background: #FFFFFF;
+    border: 1px solid rgba(0, 0, 0, 0.06);
     border-radius: 22px;
     padding: 6px 6px 6px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
-  .input-wrapper:focus-within { border-color: rgba(0, 168, 132, 0.5); }
+  .input-wrapper:focus-within { border-color: rgba(0, 168, 132, 0.4); }
 
   #input {
     flex: 1;
     background: transparent;
     border: none;
     outline: none;
-    color: #fff;
+    color: #111B21;
     font-size: 14.5px;
     font-family: inherit;
     resize: none;
@@ -460,7 +463,7 @@
     padding: 6px 0;
     line-height: 1.4;
   }
-  #input::placeholder { color: #54656F; }
+  #input::placeholder { color: #8696A0; }
 
   .send-btn {
     width: 34px;
@@ -482,7 +485,7 @@
 
   .tip {
     text-align: center;
-    color: #54656F;
+    color: #8696A0;
     font-size: 11px;
     padding: 4px 12px 0;
   }
@@ -510,7 +513,7 @@
   .modal-overlay.show { display: flex; }
 
   .modal {
-    background: linear-gradient(135deg, #1F2C34, #15202B);
+    background: linear-gradient(135deg, #FFFFFF, #F0F2F5);
     border: 1px solid rgba(0, 168, 132, 0.3);
     border-radius: 18px;
     padding: 22px;
@@ -528,7 +531,7 @@
 
   .modal label {
     display: block;
-    color: #E9EDEF;
+    color: #111B21;
     font-size: 13px;
     margin-bottom: 6px;
     margin-top: 12px;
@@ -536,7 +539,7 @@
   }
 
   .modal small, .modal p {
-    color: #8696A0;
+    color: #667781;
     font-size: 12px;
     line-height: 1.55;
     margin-bottom: 8px;
@@ -546,10 +549,10 @@
   .modal input, .modal select {
     width: 100%;
     padding: 10px 12px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(0, 168, 132, 0.3);
+    background: #F0F2F5;
+    border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 10px;
-    color: #fff;
+    color: #111B21;
     font-size: 13px;
     font-family: inherit;
   }
