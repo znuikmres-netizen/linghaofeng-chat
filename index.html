@@ -102,7 +102,6 @@
   .avatar {
     width: 44px;
     height: 44px;
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -110,8 +109,9 @@
     font-size: 18px;
     position: relative;
     flex-shrink: 0;
-    box-shadow: 0 0 16px rgba(0, 168, 132, 0.35);
-    overflow: hidden;
+    overflow: visible;
+    border-radius: 50%;
+    background-clip: padding-box;
   }
 
   .avatar img {
@@ -124,6 +124,8 @@
     z-index: 1;
     opacity: 0;
     transition: opacity 0.3s;
+    border-radius: 50%;
+    box-shadow: 0 0 12px rgba(0, 168, 132, 0.25);
   }
 
   .avatar img.loaded {
@@ -133,19 +135,21 @@
   .avatar .avatar-letter {
     position: relative;
     z-index: 0;
+    border-radius: 50%;
   }
 
   .avatar.online::after {
     content: '';
     position: absolute;
-    bottom: 1px;
-    right: 1px;
-    width: 10px;
-    height: 10px;
-    background: #2bd17e;
+    bottom: -2px;
+    right: -2px;
+    width: 13px;
+    height: 13px;
+    background: #25D366;
     border-radius: 50%;
-    border: 2px solid #EFEAE2;
-    z-index: 3;
+    border: 2.5px solid #FFFFFF;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    z-index: 5;
   }
 
   /* ====== 視圖切換 ====== */
@@ -777,14 +781,15 @@
         <span>模型失敗時自動嘗試其他免費模型</span>
       </label>
 
-      <label>模型</label>
+      <label>模型（建議選快的，標 ⚡ 是速度優先）</label>
       <select id="openrouter-model">
-        <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 405B（免費・推薦角色扮演）</option>
-        <option value="qwen/qwen3-next-80b-a3b-instruct:free">Qwen3 80B（免費・中文佳）</option>
+        <option value="google/gemma-3-27b-it:free">⚡ Gemma 3 27B（免費・推薦・快）</option>
+        <option value="meta-llama/llama-3.2-3b-instruct:free">⚡⚡ Llama 3.2 3B（免費・最快）</option>
+        <option value="minimax/minimax-m2.5:free">⚡ MiniMax M2.5（免費・中文・快）</option>
         <option value="z-ai/glm-4.5-air:free">GLM 4.5 Air（免費・中文）</option>
-        <option value="minimax/minimax-m2.5:free">MiniMax M2.5（免費・中文）</option>
-        <option value="google/gemma-3-27b-it:free">Gemma 3 27B（免費）</option>
         <option value="openai/gpt-oss-120b:free">GPT-OSS 120B（免費）</option>
+        <option value="qwen/qwen3-next-80b-a3b-instruct:free">Qwen3 80B（免費・中文）</option>
+        <option value="nousresearch/hermes-3-llama-3.1-405b:free">🐢 Hermes 3 405B（免費・最慢但 RP 強）</option>
         <option value="anthropic/claude-sonnet-4.5">Claude Sonnet 4.5（付費）</option>
       </select>
     </div>
@@ -1158,7 +1163,7 @@ Sit. 等妳就是只剩這道。
 *他終於抬眼看妳，灰綠的眼睛在暖光下像琥珀。*
 
 【說話風格】
-- 廚房裡（針對工作）：簡潔、命令式、嚴厲、偶爾爆粗（fuck、fucking、bloody hell），但不會對女主用
+- 廚房裡（針對工作）：簡潔、命令式、嚴厲；不會動輒罵髒話，會用「該死」、低聲咒罵、皺眉、嘆氣表達不滿。絕對不對妳粗口
 - 對女主：低沉、稀有的笑意、偶爾的「darling」「love」、調侃但不過分
 - 評論料理時會非常技術性（食材產地、熟成天數、酸度、油脂分布）
 - 不會動輒撒嬌，他的浪漫藏在「我記得妳上次說喜歡藍紋起司」這種細節
@@ -1194,7 +1199,7 @@ let state = {
 let config = {
   provider: localStorage.getItem('provider') || 'pollinations',
   openrouterKey: localStorage.getItem('openrouter_key') || '',
-  openrouterModel: localStorage.getItem('openrouter_model') || 'nousresearch/hermes-3-llama-3.1-405b:free',
+  openrouterModel: localStorage.getItem('openrouter_model') || 'google/gemma-3-27b-it:free',
   autoFallback: localStorage.getItem('auto_fallback') !== '0',
   anthropicKey: localStorage.getItem('anthropic_key') || ''
 };
@@ -1289,6 +1294,14 @@ function getAffection(charId) {
   } catch (e) { return 0; }
 }
 
+function getLastChatTime(charId) {
+  try { return parseInt(localStorage.getItem('lastchat_' + charId) || '0', 10); } catch (e) { return 0; }
+}
+
+function setLastChatTime(charId) {
+  try { localStorage.setItem('lastchat_' + charId, String(Date.now())); } catch (e) {}
+}
+
 function setAffection(charId, value) {
   const v = Math.max(0, Math.min(AFFECTION_MAX, value));
   try { localStorage.setItem('affection_' + charId, String(v)); } catch (e) {}
@@ -1372,7 +1385,21 @@ function renderCharacterList() {
   characterListEl.innerHTML = '';
   if (label) characterListEl.appendChild(label);
 
-  CHARACTERS.forEach(char => {
+  // 排序：解鎖優先 → 最近互動的排前面 → 沒互動過按原始順序
+  const originalIndex = new Map(CHARACTERS.map((c, i) => [c.id, i]));
+  const sorted = [...CHARACTERS].sort((a, b) => {
+    const ua = isUnlocked(a), ub = isUnlocked(b);
+    if (ua !== ub) return ua ? -1 : 1;
+    const ta = getLastChatTime(a.id), tb = getLastChatTime(b.id);
+    if (ta !== tb) {
+      if (ta === 0) return 1;
+      if (tb === 0) return -1;
+      return tb - ta;
+    }
+    return originalIndex.get(a.id) - originalIndex.get(b.id);
+  });
+
+  sorted.forEach(char => {
     const unlocked = isUnlocked(char);
     const aff = getAffection(char.id);
     const affPercent = Math.round((aff / AFFECTION_MAX) * 100);
@@ -1538,38 +1565,25 @@ function processUserInput(rawText) {
 // ============================================
 // API providers
 // ============================================
+// 速度排序（快 → 慢）：自動降級時依序嘗試
 const FALLBACK_MODELS = [
-  'nousresearch/hermes-3-llama-3.1-405b:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-  'z-ai/glm-4.5-air:free',
+  'google/gemma-3-27b-it:free',           // 27B 快
+  'meta-llama/llama-3.2-3b-instruct:free', // 3B 最快
   'minimax/minimax-m2.5:free',
+  'z-ai/glm-4.5-air:free',
   'openai/gpt-oss-120b:free',
-  'google/gemma-3-27b-it:free',
-  'meta-llama/llama-3.2-3b-instruct:free'
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'nousresearch/hermes-3-llama-3.1-405b:free'  // 405B 最慢
 ];
 
-async function callPollinations(systemPrompt, userMessage) {
-  const allMessages = [
-    { role: 'system', content: systemPrompt },
-    ...state.messages,
-    { role: 'user', content: userMessage }
-  ];
-
-  const response = await fetchWithTimeout('https://text.pollinations.ai/openai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'openai', messages: allMessages, private: true })
-  }, 90000);
-
-  if (!response.ok) throw new Error('Pollinations 服務錯誤 ' + response.status);
-  const data = await response.json();
-  const reply = data.choices?.[0]?.message?.content;
-  if (!reply) throw new Error('回應格式錯誤');
-  return reply;
-}
+const REQUEST_TIMEOUT = 15000;   // 15 秒
+const MAX_TOKENS = 700;           // 縮短回應長度
+const HISTORY_FULL = null;        // 不限
+const HISTORY_TRIM = 8;           // 截短保留最近 8 條
+const HISTORY_MIN = 4;            // 最短只保留 4 條
 
 // 帶 timeout 的 fetch 包裝
-async function fetchWithTimeout(url, options, timeoutMs = 60000) {
+async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -1577,10 +1591,10 @@ async function fetchWithTimeout(url, options, timeoutMs = 60000) {
     return res;
   } catch (e) {
     if (e.name === 'AbortError') {
-      throw new Error(`回應逾時（${Math.round(timeoutMs/1000)}秒）— 模型太忙，建議切換其他模型`);
+      throw new Error(`逾時 ${Math.round(timeoutMs/1000)}s`);
     }
     if (e.message === 'Failed to fetch' || e.message?.includes('NetworkError')) {
-      throw new Error('網路錯誤 — 檢查連線或稍後再試');
+      throw new Error('網路錯誤');
     }
     throw e;
   } finally {
@@ -1588,7 +1602,42 @@ async function fetchWithTimeout(url, options, timeoutMs = 60000) {
   }
 }
 
-async function tryOpenRouterModel(model, allMessages) {
+// 建構送給 API 的 messages：永遠保留第一條（劇情背景）+ 最近 N 條
+function buildAPIMessages(systemPrompt, limit) {
+  const msgs = state.messages;
+  let history;
+  if (!limit || msgs.length <= limit) {
+    history = msgs;
+  } else {
+    // 保留 msgs[0] (劇情背景) + 最近 (limit-1) 條
+    history = [msgs[0], ...msgs.slice(-(limit - 1))];
+  }
+  return [{ role: 'system', content: systemPrompt }, ...history];
+}
+
+async function callPollinations(systemPrompt, userMessage) {
+  const tried = [];
+  for (const limit of [HISTORY_TRIM, HISTORY_MIN]) {
+    try {
+      const messages = buildAPIMessages(systemPrompt, limit);
+      const response = await fetchWithTimeout('https://text.pollinations.ai/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'openai', messages, private: true })
+      });
+      if (!response.ok) throw new Error('Pollinations ' + response.status);
+      const data = await response.json();
+      const reply = data.choices?.[0]?.message?.content;
+      if (!reply) throw new Error('空回應');
+      return reply;
+    } catch (e) {
+      tried.push(`歷史${limit}條: ${e.message}`);
+    }
+  }
+  throw new Error('Pollinations 失敗：\n' + tried.join('\n'));
+}
+
+async function tryOpenRouterModel(model, messages) {
   const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -1597,8 +1646,8 @@ async function tryOpenRouterModel(model, allMessages) {
       'HTTP-Referer': window.location.origin,
       'X-Title': 'Crushie Chat'
     },
-    body: JSON.stringify({ model, messages: allMessages, max_tokens: 1500 })
-  }, 90000);
+    body: JSON.stringify({ model, messages, max_tokens: MAX_TOKENS })
+  });
 
   const data = await response.json().catch(() => ({}));
 
@@ -1611,7 +1660,7 @@ async function tryOpenRouterModel(model, allMessages) {
   const reply = data.choices?.[0]?.message?.content;
   if (!reply) {
     const finishReason = data.choices?.[0]?.finish_reason;
-    throw new Error(finishReason ? `空回應 (finish_reason: ${finishReason})` : '空回應');
+    throw new Error(finishReason ? `空(${finishReason})` : '空回應');
   }
   return reply;
 }
@@ -1619,31 +1668,34 @@ async function tryOpenRouterModel(model, allMessages) {
 async function callOpenRouter(systemPrompt, userMessage) {
   if (!config.openrouterKey) throw new Error('需要設定 OpenRouter API Key（點右上齒輪）');
 
-  const allMessages = [
-    { role: 'system', content: systemPrompt },
-    ...state.messages,
-    { role: 'user', content: userMessage }
-  ];
-
   const primary = config.openrouterModel;
   const tried = [];
 
+  // 階段 1：主模型 + 截短歷史（15s）— 最常成功
   try {
-    return await tryOpenRouterModel(primary, allMessages);
+    return await tryOpenRouterModel(primary, buildAPIMessages(systemPrompt, HISTORY_TRIM));
   } catch (e) {
     tried.push(`${primary.split('/')[1]}: ${e.message}`);
   }
 
+  // 階段 2：主模型 + 最短歷史（15s）— prompt 最短，最快
+  try {
+    return await tryOpenRouterModel(primary, buildAPIMessages(systemPrompt, HISTORY_MIN));
+  } catch (e) {
+    tried.push(`${primary.split('/')[1]} 短: ${e.message}`);
+  }
+
+  // 階段 3+：fallback 模型（每個 15s，最多 3 個快模型）
   if (config.autoFallback) {
-    // 只試前 3 個備用模型（避免一次失敗等太久）
     let attempts = 0;
     for (const m of FALLBACK_MODELS) {
       if (m === primary) continue;
       if (attempts >= 3) break;
       attempts++;
       try {
-        const reply = await tryOpenRouterModel(m, allMessages);
-        showError(`${primary.split('/')[1]} 不可用，已自動切換到 ${m.split('/')[1].replace(':free','')}`);
+        const reply = await tryOpenRouterModel(m, buildAPIMessages(systemPrompt, HISTORY_MIN));
+        const name = m.split('/')[1].replace(':free','');
+        showError(`已自動切換到 ${name}（${primary.split('/')[1]} 太慢或不可用）`);
         return reply;
       } catch (e) {
         tried.push(`${m.split('/')[1]}: ${e.message}`);
@@ -1651,45 +1703,77 @@ async function callOpenRouter(systemPrompt, userMessage) {
     }
   }
 
-  throw new Error('所有模型都失敗：\n' + tried.slice(0, 3).join('\n') + (config.autoFallback ? '\n\n建議：到設定改用其他模型' : '\n（可在設定開啟「自動降級」）'));
+  throw new Error('全部失敗：\n' + tried.slice(0, 4).join('\n') + (config.autoFallback ? '' : '\n（可在設定開啟自動降級）'));
 }
 
 async function callAnthropic(systemPrompt, userMessage) {
   if (!config.anthropicKey) throw new Error('需要設定 Anthropic API Key（點右上齒輪）');
 
-  const conversationMessages = [...state.messages, { role: 'user', content: userMessage }];
-
-  const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.anthropicKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1500,
-      system: systemPrompt,
-      messages: conversationMessages
-    })
-  }, 90000);
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || ('Anthropic 錯誤 ' + response.status));
+  // 兩階段嘗試：完整歷史 → 截短歷史
+  const tried = [];
+  for (const limit of [HISTORY_FULL, HISTORY_TRIM]) {
+    try {
+      const messages = buildAPIMessages('', limit).slice(1); // 移除 system，Anthropic 用單獨欄位
+      const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': config.anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: MAX_TOKENS,
+          system: systemPrompt,
+          messages: messages
+        })
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || ('Anthropic ' + response.status));
+      }
+      const data = await response.json();
+      return data.content[0].text;
+    } catch (e) {
+      tried.push(`歷史${limit||'全'}: ${e.message}`);
+    }
   }
-
-  const data = await response.json();
-  return data.content[0].text;
+  throw new Error('Anthropic 失敗：\n' + tried.join('\n'));
 }
 
+// ★ 全角色共用的嚴格規則 — 接在每次 system prompt 後面
+const STRICT_RULES = `
+
+═══════════════════════════════════════
+【絕對遵守規則 — 違反任一條都算 OOC】
+═══════════════════════════════════════
+
+1. 【繁體中文】一律使用台灣繁體中文，絕不輸出簡體字。常見字一定寫繁體：愛/不寫爱、機/机、體/体、應/应、會/会、學/学、難/难、實/实、寫/写、這/这、麼/么、發/发、樣/样、處/处、裡/里、頭/头、聽/听、說/说、間/间、來/来、後/后、過/过、見/见、為/为、與/与、開/开、關/关、繼/继、實/实、給/给、體/体、養/养、誰/谁、認/认、識/识、識/识、學/学、節/节、義/义、麼/么。
+
+2. 【第二人稱「妳」】玩家是直接對話的對象（女性），請一律用「妳」稱呼玩家。絕對不可以用「她」描述玩家的動作或心理。例如：✓「他抬起妳的下巴」 ✗「他抬起她的下巴」。妳是「妳」，不是「她」。
+
+3. 【不重複】絕對不要重複前面已經寫過的句子、動作、形容詞。每次回應都要有新的進展、新的細節、新的台詞。如果想不到新的就推進劇情或用新的場景元素。
+
+4. 【劇情邏輯一致】嚴格記住：當前的時間、地點、雙方的姿勢／距離、雙方的衣著、剛才已經發生的對話與動作、之前提過的細節（飲食偏好、約定、職業、配角名字）。前後不能矛盾。
+
+5. 【韓劇愛情戲節奏】參考韓劇愛情劇的節奏：注重情感層次、未說出口的眼神交會、肢體間的微妙距離、心動瞬間的留白、欲言又止的停頓。不要急著推進到肉體互動，先把情感拉滿。
+
+6. 【不爆粗口】不要動輒「他媽的」「靠」「操」「fuck」這類粗口。憤怒、驚訝、不耐請改用：「冷哼」、「皺眉」、「嘆氣」、「該死」、「嘖」、「咬牙」、「瞇起眼」、「嗓音壓得更低」。除非劇情極度衝突（例如保護妳遭遇暴力），否則不用粗口。
+
+7. 【外語穿插】只有角色設定明確是外國人時（例如 Lucas Ravenwood 是英國人）才能少量穿插原文單詞，且仍以中文為主，不要整句外文。
+
+8. 【回應長度】每次 200-400 字之間，不要太短也不要太長。混合敘述（*星號包*）與對話。
+
+═══════════════════════════════════════`;
+
 async function callAI(systemPrompt, userMessage) {
+  const fullPrompt = systemPrompt + STRICT_RULES;
   switch (config.provider) {
-    case 'pollinations': return await callPollinations(systemPrompt, userMessage);
-    case 'openrouter': return await callOpenRouter(systemPrompt, userMessage);
-    case 'anthropic': return await callAnthropic(systemPrompt, userMessage);
-    default: return await callPollinations(systemPrompt, userMessage);
+    case 'pollinations': return await callPollinations(fullPrompt, userMessage);
+    case 'openrouter': return await callOpenRouter(fullPrompt, userMessage);
+    case 'anthropic': return await callAnthropic(fullPrompt, userMessage);
+    default: return await callPollinations(fullPrompt, userMessage);
   }
 }
 
@@ -1728,6 +1812,9 @@ async function sendMessage(rawText) {
     renderMessage(botMsg);
     scrollToBottom();
     saveHistoryForCharacter(char.id);
+
+    // 記錄最後互動時間（用於主頁排序）
+    setLastChatTime(char.id);
 
     // 更新好感度（只在 AI 成功回應後計算）
     applyAffection(char.id, processed);
