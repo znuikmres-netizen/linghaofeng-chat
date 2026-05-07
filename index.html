@@ -781,9 +781,10 @@
 <div class="modal-overlay" id="notes-modal">
   <div class="modal">
     <h2>📋 劇情備忘錄</h2>
-    <p>記錄重要劇情事件、角色關係、約定等。每次對話都會自動帶入，幫助 AI 記住長期記憶。</p>
-    <textarea id="notes-input" style="width:100%;height:160px;background:#F0F2F5;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;color:#111B21;resize:vertical;" placeholder="例：已確立戀人關係。他帶我見過父母。上週一起去溫泉旅行…"></textarea>
+    <p id="notes-status" style="font-size:12px;color:#667781;margin-bottom:6px;">系統自動分析對話並記錄重要事件，每次對話都會帶入幫助 AI 記憶。</p>
+    <textarea id="notes-input" style="width:100%;height:160px;background:#F0F2F5;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;color:#111B21;resize:vertical;" placeholder="等待 AI 自動分析……也可以手動輸入重要記憶。"></textarea>
     <div class="modal-buttons">
+      <button class="btn-secondary" id="notes-analyze-btn" style="margin-right:auto;">🔄 重新分析</button>
       <button class="btn-secondary" id="notes-cancel">取消</button>
       <button class="btn-primary" id="notes-save">儲存</button>
     </div>
@@ -1626,6 +1627,8 @@ const MAX_TOKENS_FAST = 800;      // 快速指令用
 const HISTORY_FULL = null;        // 不限
 const HISTORY_TRIM = 30;          // 保留最近 30 條（個人使用不需省 context）
 const HISTORY_MIN = 6;            // 最短保留 6 條
+const NOTES_UPDATE_INTERVAL = 23 * 60 * 60 * 1000; // 23 小時自動更新一次
+const NOTES_MSG_THRESHOLD = 10;   // 每累積 10 則訊息自動更新一次
 // 偵測是否為快速指令（推進/新劇情）—— 只縮短 token，不換模型
 function isQuickCommand(userMsg) {
   return /請開啟新劇情|請繼續推進劇情|新劇情|推進劇情/.test(userMsg || '');
@@ -1882,9 +1885,137 @@ function getCharNotes(charId) {
 function saveCharNotes(charId, text) {
   try { localStorage.setItem('plot_notes_' + charId, text); } catch(e) {}
 }
+function getNotesUpdatedAt(charId) {
+  try { return parseInt(localStorage.getItem('notes_updated_' + charId) || '0'); } catch(e) { return 0; }
+}
+function saveNotesUpdatedAt(charId) {
+  try { localStorage.setItem('notes_updated_' + charId, Date.now().toString()); } catch(e) {}
+}
+function getNotesCount(charId) {
+  try { return parseInt(localStorage.getItem('notes_count_' + charId) || '0'); } catch(e) { return 0; }
+}
+function saveNotesCount(charId, count) {
+  try { localStorage.setItem('notes_count_' + charId, count.toString()); } catch(e) {}
+}
+
+function shouldAutoUpdateNotes(charId) {
+  const now = Date.now();
+  const lastUpdated = getNotesUpdatedAt(charId);
+  const lastCount = getNotesCount(charId);
+  const msgs = state.messages.filter(m => m.role === 'assistant').length;
+  const timePassed = (now - lastUpdated) > NOTES_UPDATE_INTERVAL;
+  const newMsgs = (msgs - lastCount) >= NOTES_MSG_THRESHOLD;
+  return timePassed || newMsgs;
+}
+
+async function buildSummaryFromHistory(charId) {
+  const char = CHARACTERS.find(c => c.id === charId);
+  if (!char) return null;
+  const history = state.messages.slice(-40); // 只用最近 40 條
+  if (history.length < 4) return null;
+
+  const historyText = history.map(m =>
+    (m.role === 'user' ? '【玩家】' : `【${char.name}】`) + m.content
+  ).join('\n');
+
+  const summaryPrompt = `你是一個角色扮演故事記錄員，負責從對話記錄中整理重要劇情備忘錄。
+請閱讀以下對話，用繁體中文整理成結構化備忘錄（不超過300字），包含：
+1. 當前關係階段（例：陌生→好友→曖昧→戀人）
+2. 重要事件（最多6條，每條不超過25字）
+3. 角色特點（${char.name}的個性、習慣、偏好）
+4. 重要細節（約定、秘密、地點、稱呼等）
+
+只輸出備忘錄內文，不要其他說明。`;
+
+  const messages = [
+    { role: 'user', content: `${summaryPrompt}\n\n【對話記錄】\n${historyText}` }
+  ];
+
+  if (config.provider === 'openrouter' && config.openrouterKey) {
+    const model = config.openrouterModel || FALLBACK_MODELS[0];
+    const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.openrouterKey },
+      body: JSON.stringify({ model, messages, max_tokens: 500 })
+    }, REQUEST_TIMEOUT);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  } else if (config.provider === 'pollinations') {
+    const res = await fetchWithTimeout('https://text.pollinations.ai/openai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'openai', messages, max_tokens: 500 })
+    }, REQUEST_TIMEOUT);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  } else if (config.provider === 'anthropic' && config.anthropicKey) {
+    const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': config.anthropicKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', messages, max_tokens: 500 })
+    }, REQUEST_TIMEOUT);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.content?.[0]?.text?.trim() || null;
+  }
+  return null;
+}
+
+async function autoUpdateNotes(charId) {
+  if (!shouldAutoUpdateNotes(charId)) return;
+  const summary = await buildSummaryFromHistory(charId);
+  if (!summary) return;
+  saveCharNotes(charId, summary);
+  saveNotesUpdatedAt(charId);
+  saveNotesCount(charId, state.messages.filter(m => m.role === 'assistant').length);
+}
+
+async function manualAnalyzeNotes() {
+  const charId = state.currentCharId;
+  if (!charId) return;
+  const btn = $('notes-analyze-btn');
+  btn.disabled = true;
+  btn.textContent = '分析中…';
+  $('notes-status').textContent = '正在分析對話記錄…';
+  try {
+    const summary = await buildSummaryFromHistory(charId);
+    if (summary) {
+      saveCharNotes(charId, summary);
+      saveNotesUpdatedAt(charId);
+      saveNotesCount(charId, state.messages.filter(m => m.role === 'assistant').length);
+      $('notes-input').value = summary;
+      $('notes-status').textContent = '✅ 分析完成，已更新備忘錄。';
+    } else {
+      $('notes-status').textContent = '⚠ 對話記錄不足或分析失敗，請稍後重試。';
+    }
+  } catch(e) {
+    $('notes-status').textContent = '⚠ 分析出錯：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 重新分析';
+  }
+}
+
+function notesStatusText(charId) {
+  const ts = getNotesUpdatedAt(charId);
+  if (!ts) return '尚未自動分析（累積10則對話後自動觸發）';
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return '上次自動更新：剛剛';
+  if (m < 60) return `上次自動更新：${m} 分鐘前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `上次自動更新：${h} 小時前`;
+  return `上次自動更新：${Math.floor(h / 24)} 天前`;
+}
 
 function openNotes() {
-  $('notes-input').value = getCharNotes(state.currentCharId);
+  const charId = state.currentCharId;
+  $('notes-input').value = getCharNotes(charId);
+  $('notes-status').textContent = notesStatusText(charId);
+  $('notes-analyze-btn').disabled = false;
+  $('notes-analyze-btn').textContent = '🔄 重新分析';
   $('notes-modal').classList.add('show');
 }
 
@@ -2018,6 +2149,9 @@ async function sendMessage(rawText) {
 
     // 更新好感度（只在 AI 成功回應後計算）
     applyAffection(char.id, processed);
+
+    // 背景自動更新劇情備忘錄（fire-and-forget）
+    autoUpdateNotes(char.id).catch(() => {});
   } catch (err) {
     removeTyping();
     showError(friendlyError(err.message));
@@ -2155,6 +2289,7 @@ $('notes-save').addEventListener('click', () => {
   $('notes-modal').classList.remove('show');
 });
 $('notes-modal').addEventListener('click', e => { if (e.target === $('notes-modal')) $('notes-modal').classList.remove('show'); });
+$('notes-analyze-btn').addEventListener('click', manualAnalyzeNotes);
 $('export-btn').addEventListener('click', () => { exportConversation(); });
 $('import-input').addEventListener('change', e => { if (e.target.files[0]) importConversation(e.target.files[0]); e.target.value = ''; });
 
