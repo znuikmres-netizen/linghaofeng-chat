@@ -818,19 +818,26 @@
       <select id="openrouter-model">
         <optgroup label="⚡ 快速・中文優先">
           <option value="minimax/minimax-m2.5:free">⚡🈶★ MiniMax M2.5（極快・繁中最佳）</option>
+          <option value="moonshotai/kimi-k2:free">⚡🈶★ Kimi K2（極快・繁中旗艦）</option>
+          <option value="deepseek/deepseek-chat-v3.1:free">⚡🈶 DeepSeek V3.1（快・最新）</option>
           <option value="google/gemini-2.0-flash-exp:free">⚡ Gemini 2.0 Flash（極快・1M ctx）</option>
-          <option value="google/gemini-flash-1.5:free">⚡ Gemini 1.5 Flash（快・1M ctx）</option>
-          <option value="deepseek/deepseek-chat:free">⚡🈶 DeepSeek-V3（快・繁中自然）</option>
+          <option value="stepfun/step-3.5-flash:free">⚡🈶 Step-3.5 Flash（快・中文）</option>
           <option value="z-ai/glm-4.5-air:free">⚡🈶 GLM 4.5 Air（快・中文）</option>
+          <option value="google/gemini-flash-1.5:free">⚡ Gemini 1.5 Flash（快・1M ctx）</option>
         </optgroup>
         <optgroup label="★ 高品質・中等速度">
+          <option value="qwen/qwen3-32b:free">🈶★ Qwen3 32B（快・繁中強）</option>
           <option value="qwen/qwen-2.5-72b-instruct:free">🈶★ Qwen2.5 72B（繁中開源最佳）</option>
-          <option value="qwen/qwq-32b:free">🈶 QwQ 32B（中文推理強）</option>
-          <option value="google/gemma-3-27b-it:free">Gemma 3 27B（穩定・劇情佳）</option>
+          <option value="tencent/hunyuan-a13b-instruct:free">🈶 騰訊混元 A13B（中文 MoE）</option>
+          <option value="thudm/glm-z1-32b:free">🈶 GLM-Z1 32B（推理・中文）</option>
+          <option value="google/gemma-4-31b-it:free">Gemma 4 31B（最新 Google）</option>
+          <option value="qwen/qwq-32b:free">🈶 QwQ 32B（中文推理）</option>
           <option value="deepseek/deepseek-r1-distill-qwen-32b:free">🈶 DeepSeek R1+Qwen32B（推理）</option>
           <option value="qwen/qwen3-next-80b-a3b-instruct:free">🈶 Qwen3 80B（中文強）</option>
+          <option value="google/gemma-3-27b-it:free">Gemma 3 27B（穩定・劇情佳）</option>
         </optgroup>
         <optgroup label="🐢 大模型・最強但較慢">
+          <option value="qwen/qwen3-235b-a22b:free">🈶🐢 Qwen3 235B MoE（頂級中文）</option>
           <option value="openai/gpt-oss-120b:free">GPT-OSS 120B（劇情完整）</option>
           <option value="nousresearch/hermes-3-llama-3.1-405b:free">🐢 Hermes 3 405B（RP 最強・最慢）</option>
         </optgroup>
@@ -1630,17 +1637,20 @@ function processUserInput(rawText) {
 const FALLBACK_MODELS = [
   // ── 快速・中文優先 ──
   'minimax/minimax-m2.5:free',              // 中文最佳・極快
+  'moonshotai/kimi-k2:free',               // Kimi K2・極快・繁中旗艦
+  'deepseek/deepseek-chat-v3.1:free',      // DeepSeek V3.1・快・最新
   'google/gemini-2.0-flash-exp:free',       // Gemini 2.0 Flash・極快・1M ctx
-  'google/gemini-flash-1.5:free',           // Gemini 1.5 Flash・快・1M ctx
-  'deepseek/deepseek-chat:free',            // DeepSeek-V3・快・繁中自然
-  'z-ai/glm-4.5-air:free',                  // GLM 中文・快
+  'stepfun/step-3.5-flash:free',           // Step-3.5 Flash・中文・快
+  'z-ai/glm-4.5-air:free',                  // GLM 4.5 Air・中文・快
   // ── 中等速度・高品質 ──
-  'qwen/qwen-2.5-72b-instruct:free',        // Qwen2.5 72B・繁中最佳開源
-  'qwen/qwq-32b:free',                      // QwQ 32B・中文推理強
-  'google/gemma-3-27b-it:free',             // Gemma3 27B・穩定
-  'deepseek/deepseek-r1-distill-qwen-32b:free', // R1+Qwen32B・繁中推理
+  'qwen/qwen3-32b:free',                   // Qwen3 32B・快・繁中強
+  'qwen/qwen-2.5-72b-instruct:free',        // Qwen2.5 72B・繁中開源最佳
+  'tencent/hunyuan-a13b-instruct:free',    // 騰訊混元・中文 MoE
+  'thudm/glm-z1-32b:free',                 // GLM-Z1 32B・推理・中文
+  'google/gemma-4-31b-it:free',            // Gemma 4 31B・最新 Google
   'qwen/qwen3-next-80b-a3b-instruct:free',  // Qwen3 80B・中文強
   // ── 大模型・最強但較慢 ──
+  'qwen/qwen3-235b-a22b:free',             // Qwen3 235B MoE・頂級中文
   'openai/gpt-oss-120b:free',               // 120B・劇情完整
   'nousresearch/hermes-3-llama-3.1-405b:free' // 405B 最慢但最強
 ];
