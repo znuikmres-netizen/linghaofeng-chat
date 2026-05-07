@@ -481,6 +481,15 @@
   }
   .message.user .narration { color: #54656F; font-weight: 400; }
 
+  .msg-time {
+    font-size: 10px;
+    color: #8696A0;
+    margin-top: 3px;
+    padding: 0 2px;
+  }
+  .message.bot .msg-time { padding-left: 40px; }
+  .message.user .msg-time { text-align: right; }
+
   /* 打字指示器 */
   .typing {
     display: flex;
@@ -535,6 +544,9 @@
   }
   .action-btn:active { transform: scale(0.97); }
   .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .action-bar2 { padding-top: 0; padding-bottom: 8px; }
+  .action-btn-sm { font-size: 12px; padding: 7px 10px; }
+  .action-btn-danger { background: rgba(220,53,69,0.1); border-color: rgba(220,53,69,0.3); color: #dc3545; }
 
   /* 輸入區 */
   .input-area {
@@ -738,6 +750,7 @@
         <div class="status" id="chat-status">線上</div>
       </div>
       <div class="header-action" id="reset-btn" title="重置對話">⟲</div>
+      <div class="header-action" id="notes-btn" title="劇情備忘錄">📋</div>
       <div class="header-action" id="settings-btn" title="設定">⚙</div>
     </div>
 
@@ -747,6 +760,10 @@
     <div class="action-bar">
       <button class="action-btn" id="advance-btn">▶ 推進劇情</button>
       <button class="action-btn" id="newplot-btn">✦ 新劇情</button>
+    </div>
+    <div class="action-bar action-bar2">
+      <button class="action-btn action-btn-sm" id="regen-btn">↺ 重新生成</button>
+      <button class="action-btn action-btn-sm action-btn-danger" id="delete-btn">🗑 刪除回應</button>
     </div>
 
     <div class="input-area">
@@ -758,6 +775,19 @@
     </div>
   </div>
 
+</div>
+
+<!-- 備忘錄 Modal -->
+<div class="modal-overlay" id="notes-modal">
+  <div class="modal">
+    <h2>📋 劇情備忘錄</h2>
+    <p>記錄重要劇情事件、角色關係、約定等。每次對話都會自動帶入，幫助 AI 記住長期記憶。</p>
+    <textarea id="notes-input" style="width:100%;height:160px;background:#F0F2F5;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;color:#111B21;resize:vertical;" placeholder="例：已確立戀人關係。他帶我見過父母。上週一起去溫泉旅行…"></textarea>
+    <div class="modal-buttons">
+      <button class="btn-secondary" id="notes-cancel">取消</button>
+      <button class="btn-primary" id="notes-save">儲存</button>
+    </div>
+  </div>
 </div>
 
 <!-- 設定 Modal -->
@@ -805,6 +835,15 @@
       <button class="btn-secondary" id="modal-cancel">取消</button>
       <button class="btn-primary" id="modal-save">儲存</button>
     </div>
+    <hr style="border:none;border-top:1px solid rgba(0,0,0,0.08);margin:16px 0;">
+    <label>對話備份</label>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn-secondary" id="export-btn" style="flex:1;padding:9px;">⬇ 匯出對話</button>
+      <label class="btn-secondary" id="import-label" style="flex:1;padding:9px;text-align:center;cursor:pointer;">⬆ 匯入對話
+        <input type="file" id="import-input" accept=".json" style="display:none;">
+      </label>
+    </div>
+    <small>匯出為 JSON 檔案，可在換裝置或清除記憶體後還原。</small>
   </div>
 </div>
 
@@ -1511,6 +1550,12 @@ function renderMessage(msg, animate = true) {
 
   row.appendChild(bubble);
   wrapper.appendChild(row);
+  if (msg.ts) {
+    const timeEl = document.createElement('div');
+    timeEl.className = 'msg-time';
+    timeEl.textContent = new Date(msg.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    wrapper.appendChild(timeEl);
+  }
   messagesEl.appendChild(wrapper);
 }
 
@@ -1575,12 +1620,12 @@ const FALLBACK_MODELS = [
   'nousresearch/hermes-3-llama-3.1-405b:free' // 405B 最慢但最強
 ];
 
-const REQUEST_TIMEOUT = 15000;   // 15 秒
-const MAX_TOKENS = 650;           // 縮短回應長度
-const MAX_TOKENS_FAST = 450;      // 快速指令（推進/新劇情）用更短
+const REQUEST_TIMEOUT = 35000;   // 35 秒（免費大模型需要更長等待時間）
+const MAX_TOKENS = 1200;          // 回應上限（中文約 800 字）
+const MAX_TOKENS_FAST = 800;      // 快速指令用
 const HISTORY_FULL = null;        // 不限
-const HISTORY_TRIM = 8;           // 截短保留最近 8 條
-const HISTORY_MIN = 4;            // 最短只保留 4 條
+const HISTORY_TRIM = 30;          // 保留最近 30 條（個人使用不需省 context）
+const HISTORY_MIN = 6;            // 最短保留 6 條
 // 偵測是否為快速指令（推進/新劇情）—— 只縮短 token，不換模型
 function isQuickCommand(userMsg) {
   return /請開啟新劇情|請繼續推進劇情|新劇情|推進劇情/.test(userMsg || '');
@@ -1779,13 +1824,160 @@ const STRICT_RULES = `
 ═══════════════════════════════════════`;
 
 async function callAI(systemPrompt, userMessage) {
-  const fullPrompt = systemPrompt + STRICT_RULES;
+  const notes = getCharNotes(state.currentCharId);
+  const notesSection = notes ? `\n\n【玩家劇情備忘錄（重要，每次必讀）】\n${notes}\n` : '';
+  const affSection = affectionStageText(state.currentCharId);
+  const fullPrompt = systemPrompt + notesSection + affSection + STRICT_RULES;
   switch (config.provider) {
     case 'pollinations': return await callPollinations(fullPrompt, userMessage);
     case 'openrouter': return await callOpenRouter(fullPrompt, userMessage);
     case 'anthropic': return await callAnthropic(fullPrompt, userMessage);
     default: return await callPollinations(fullPrompt, userMessage);
   }
+}
+
+// ============================================
+// setLoading helper
+// ============================================
+function setLoading(on) {
+  state.isLoading = on;
+  sendBtn.disabled = on;
+  advanceBtn.disabled = on;
+  newplotBtn.disabled = on;
+  $('regen-btn').disabled = on;
+  $('delete-btn').disabled = on;
+}
+
+// ============================================
+// 友善錯誤訊息
+// ============================================
+function friendlyError(msg) {
+  if (!msg) return '未知錯誤，請稍後再試';
+  const m = msg.toLowerCase();
+  if (m.includes('timeout') || m.includes('abort') || m.includes('逾時'))
+    return '模型回應逾時（免費模型有時較慢），請稍後再試或切換較快的模型';
+  if (m.includes('network') || m.includes('networkerror') || m.includes('failed to fetch') || m.includes('網路'))
+    return '網路連線問題，請確認網路後重試';
+  if (m.includes('rate limit') || m.includes('429') || m.includes('too many'))
+    return '模型使用頻率過高，請等待 30 秒後再試';
+  if (m.includes('401') || m.includes('unauthorized') || m.includes('invalid api key'))
+    return 'API Key 無效，請到右上角設定重新確認';
+  if (m.includes('402') || m.includes('credit') || m.includes('billing') || m.includes('insufficient'))
+    return 'API 額度不足，請確認帳戶餘額';
+  if (m.includes('503') || m.includes('overload') || m.includes('unavailable'))
+    return '模型目前過載，請稍後再試或切換其他模型';
+  if (m.includes('空回應') || m.includes('empty'))
+    return '模型回傳空回應，請重新傳送或切換模型';
+  if (m.includes('全部失敗'))
+    return '所有備用模型均失敗，請確認 API Key 是否正確，或稍後再試';
+  return msg;
+}
+
+// ============================================
+// 角色備忘錄
+// ============================================
+function getCharNotes(charId) {
+  try { return localStorage.getItem('plot_notes_' + charId) || ''; } catch(e) { return ''; }
+}
+function saveCharNotes(charId, text) {
+  try { localStorage.setItem('plot_notes_' + charId, text); } catch(e) {}
+}
+
+function openNotes() {
+  $('notes-input').value = getCharNotes(state.currentCharId);
+  $('notes-modal').classList.add('show');
+}
+
+// ============================================
+// 好感度階段文字
+// ============================================
+function affectionStageText(charId) {
+  const aff = getAffection(charId);
+  let stage;
+  if (aff < 200) stage = '初識探索期——保持適當距離，偶爾流露好奇與好感';
+  else if (aff < 400) stage = '心動曖昧期——明顯對彼此有感覺，互動更自然，會主動靠近';
+  else if (aff < 600) stage = '確立關係期——已是戀人，可自然表達愛意、佔有欲與嫉妒';
+  else if (aff < 800) stage = '深度戀愛期——感情穩固，偶爾流露脆弱，保護欲強烈';
+  else stage = '靈魂伴侶期——最深的連結，無條件信任，最私密的陪伴與依賴';
+  return `\n【當前關係階段】${stage}（好感度 ${aff}/1000）\n`;
+}
+
+// ============================================
+// 匯出/匯入
+// ============================================
+function exportConversation() {
+  if (!state.currentCharId) { alert('請先進入對話再匯出'); return; }
+  const charId = state.currentCharId;
+  const data = {
+    charId, exportDate: new Date().toISOString(),
+    messages: state.messages,
+    affection: getAffection(charId),
+    notes: getCharNotes(charId)
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const dateStr = new Date().toLocaleDateString('zh-TW').replace(/\//g, '-');
+  a.download = `${charId}_${dateStr}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importConversation(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.messages || !Array.isArray(data.messages)) { alert('無效的備份檔案'); return; }
+      if (!confirm(`確定載入 ${data.messages.length} 條訊息？目前對話將被覆蓋。`)) return;
+      state.messages = data.messages;
+      saveHistoryForCharacter(state.currentCharId);
+      if (data.affection !== undefined) setAffection(state.currentCharId, data.affection);
+      if (data.notes) saveCharNotes(state.currentCharId, data.notes);
+      renderMessages(); updateChatHeaderAffection(); scrollToBottom();
+      $('settings-modal').classList.remove('show');
+    } catch (err) { alert('讀取失敗：' + err.message); }
+  };
+  reader.readAsText(file);
+}
+
+// ============================================
+// 重新生成 + 刪除回應
+// ============================================
+async function regenerateLast() {
+  if (state.isLoading) return;
+  const msgs = state.messages;
+  if (msgs.length < 2 || msgs[msgs.length-1].role !== 'assistant') return;
+  const char = currentCharacter();
+  if (!char) return;
+  const lastUserContent = msgs[msgs.length-2].content;
+  state.messages.pop();
+  renderMessages(); scrollToBottom();
+  setLoading(true);
+  showTyping();
+  try {
+    const reply = await callAI(char.systemPrompt, lastUserContent);
+    removeTyping();
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
+    state.messages.push(botMsg);
+    renderMessage(botMsg); scrollToBottom();
+    saveHistoryForCharacter(char.id);
+  } catch (err) {
+    removeTyping();
+    showError(friendlyError(err.message));
+    renderMessages(); scrollToBottom();
+  } finally { setLoading(false); }
+}
+
+function deleteLastBotMsg() {
+  if (state.isLoading) return;
+  const msgs = state.messages;
+  if (!msgs.length || msgs[msgs.length-1].role !== 'assistant') return;
+  if (!confirm('刪除最後一條回應？')) return;
+  state.messages.pop();
+  saveHistoryForCharacter(state.currentCharId);
+  renderMessages(); scrollToBottom();
 }
 
 // ============================================
@@ -1799,12 +1991,9 @@ async function sendMessage(rawText) {
   const processed = processUserInput(rawText);
   if (!processed) return;
 
-  state.isLoading = true;
-  sendBtn.disabled = true;
-  advanceBtn.disabled = true;
-  newplotBtn.disabled = true;
+  setLoading(true);
 
-  const userMsg = { role: 'user', content: processed };
+  const userMsg = { role: 'user', content: processed, ts: Date.now() };
   state.messages.push(userMsg);
   renderMessage(userMsg);
   scrollToBottom();
@@ -1818,7 +2007,7 @@ async function sendMessage(rawText) {
     const reply = await callAI(char.systemPrompt, processed);
     removeTyping();
 
-    const botMsg = { role: 'assistant', content: reply };
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
     state.messages.push(botMsg);
     renderMessage(botMsg);
     scrollToBottom();
@@ -1831,7 +2020,7 @@ async function sendMessage(rawText) {
     applyAffection(char.id, processed);
   } catch (err) {
     removeTyping();
-    showError(err.message);
+    showError(friendlyError(err.message));
     state.messages.pop();
     renderMessages();
     // 保留使用者輸入，讓玩家可以直接複製重送
@@ -1840,10 +2029,7 @@ async function sendMessage(rawText) {
     inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
     scrollToBottom();
   } finally {
-    state.isLoading = false;
-    sendBtn.disabled = false;
-    advanceBtn.disabled = false;
-    newplotBtn.disabled = false;
+    setLoading(false);
   }
 }
 
@@ -1960,6 +2146,17 @@ providerSelect.addEventListener('change', updateProviderUI);
 settingsModal.addEventListener('click', (e) => {
   if (e.target === settingsModal) settingsModal.classList.remove('show');
 });
+$('regen-btn').addEventListener('click', regenerateLast);
+$('delete-btn').addEventListener('click', deleteLastBotMsg);
+$('notes-btn').addEventListener('click', openNotes);
+$('notes-cancel').addEventListener('click', () => $('notes-modal').classList.remove('show'));
+$('notes-save').addEventListener('click', () => {
+  saveCharNotes(state.currentCharId, $('notes-input').value.trim());
+  $('notes-modal').classList.remove('show');
+});
+$('notes-modal').addEventListener('click', e => { if (e.target === $('notes-modal')) $('notes-modal').classList.remove('show'); });
+$('export-btn').addEventListener('click', () => { exportConversation(); });
+$('import-input').addEventListener('change', e => { if (e.target.files[0]) importConversation(e.target.files[0]); e.target.value = ''; });
 
 // ============================================
 // 初始化
