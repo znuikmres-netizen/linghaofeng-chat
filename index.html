@@ -1579,9 +1579,7 @@ const MAX_TOKENS_FAST = 450;      // 快速指令（推進/新劇情）用更短
 const HISTORY_FULL = null;        // 不限
 const HISTORY_TRIM = 8;           // 截短保留最近 8 條
 const HISTORY_MIN = 4;            // 最短只保留 4 條
-const FAST_MODEL = 'meta-llama/llama-3.2-3b-instruct:free'; // 「新劇情」自動切到這個
-
-// 偵測是否為快速指令（推進/新劇情）
+// 偵測是否為快速指令（推進/新劇情）—— 只縮短 token，不換模型
 function isQuickCommand(userMsg) {
   return /請開啟新劇情|請繼續推進劇情|新劇情|推進劇情/.test(userMsg || '');
 }
@@ -1648,7 +1646,7 @@ async function tryOpenRouterModel(model, messages, maxTokens) {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ' + config.openrouterKey,
       'HTTP-Referer': window.location.origin,
-      'X-Title': 'Crushie Chat'
+      'X-Title': 'Lil Talk'
     },
     body: JSON.stringify({ model, messages, max_tokens: maxTokens || MAX_TOKENS })
   });
@@ -1672,9 +1670,9 @@ async function tryOpenRouterModel(model, messages, maxTokens) {
 async function callOpenRouter(systemPrompt, userMessage) {
   if (!config.openrouterKey) throw new Error('需要設定 OpenRouter API Key（點右上齒輪）');
 
-  // 偵測快速指令：直接用最快小模型 + 較短輸出，避開大模型晚上排隊
+  // 快速指令縮短輸出長度，但仍用使用者設定的模型
   const quick = isQuickCommand(userMessage);
-  const primary = quick ? FAST_MODEL : config.openrouterModel;
+  const primary = config.openrouterModel;
   const maxTok = quick ? MAX_TOKENS_FAST : MAX_TOKENS;
   const tried = [];
 
