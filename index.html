@@ -816,6 +816,7 @@
 
       <label>模型（⚡ 快速・🈶 中文優化・★ 推薦）</label>
       <select id="openrouter-model">
+        <option value="auto">🚀 自動選擇最快（推薦）</option>
         <optgroup label="⚡ 快速・中文優先">
           <option value="minimax/minimax-m2.5:free">⚡🈶★ MiniMax M2.5（極快・繁中最佳）</option>
           <option value="moonshotai/kimi-k2:free">⚡🈶★ Kimi K2（極快・繁中旗艦）</option>
@@ -1260,7 +1261,7 @@ let state = {
 let config = {
   provider: localStorage.getItem('provider') || 'pollinations',
   openrouterKey: localStorage.getItem('openrouter_key') || '',
-  openrouterModel: localStorage.getItem('openrouter_model') || 'minimax/minimax-m2.5:free',
+  openrouterModel: localStorage.getItem('openrouter_model') || 'auto',
   autoFallback: localStorage.getItem('auto_fallback') !== '0',
   anthropicKey: localStorage.getItem('anthropic_key') || ''
 };
@@ -1754,45 +1755,56 @@ async function tryOpenRouterModel(model, messages, maxTokens) {
 async function callOpenRouter(systemPrompt, userMessage) {
   if (!config.openrouterKey) throw new Error('需要設定 OpenRouter API Key（點右上齒輪）');
 
-  // 快速指令縮短輸出長度，但仍用使用者設定的模型
   const quick = isQuickCommand(userMessage);
-  const primary = config.openrouterModel;
   const maxTok = quick ? MAX_TOKENS_FAST : MAX_TOKENS;
   const tried = [];
+  const isAuto = config.openrouterModel === 'auto';
 
-  // 階段 1：選定模型 + 截短歷史
-  try {
-    return await tryOpenRouterModel(primary, buildAPIMessages(systemPrompt, HISTORY_TRIM), maxTok);
-  } catch (e) {
-    tried.push(`${primary.split('/')[1]}: ${e.message}`);
+  if (!isAuto) {
+    // 使用者指定模型：先完整歷史，失敗再截短
+    const primary = config.openrouterModel;
+    try {
+      return await tryOpenRouterModel(primary, buildAPIMessages(systemPrompt, HISTORY_TRIM), maxTok);
+    } catch (e) { tried.push(`${primary.split('/')[1]}: ${e.message}`); }
+
+    try {
+      return await tryOpenRouterModel(primary, buildAPIMessages(systemPrompt, HISTORY_MIN), maxTok);
+    } catch (e) { tried.push(`${primary.split('/')[1]} 短: ${e.message}`); }
   }
 
-  // 階段 2：選定模型 + 最短歷史
-  try {
-    return await tryOpenRouterModel(primary, buildAPIMessages(systemPrompt, HISTORY_MIN), maxTok);
-  } catch (e) {
-    tried.push(`${primary.split('/')[1]} 短: ${e.message}`);
-  }
+  // 自動模式 OR 指定模型全失敗後降級
+  if (isAuto || config.autoFallback) {
+    // 從上次成功的模型開始，避免每次都重頭掃
+    const lastGood = sessionStorage.getItem('auto_best_model');
+    const startIdx = lastGood ? Math.max(0, FALLBACK_MODELS.indexOf(lastGood)) : 0;
+    const ordered = startIdx > 0
+      ? [...FALLBACK_MODELS.slice(startIdx), ...FALLBACK_MODELS.slice(0, startIdx)]
+      : [...FALLBACK_MODELS];
 
-  // 階段 3+：fallback 模型（每個 15s，最多 3 個）
-  if (config.autoFallback) {
+    const maxAttempts = isAuto ? ordered.length : 3;
     let attempts = 0;
-    for (const m of FALLBACK_MODELS) {
-      if (m === primary) continue;
-      if (attempts >= 3) break;
+
+    for (const m of ordered) {
+      if (!isAuto && m === config.openrouterModel) continue;
+      if (attempts >= maxAttempts) break;
       attempts++;
       try {
-        const reply = await tryOpenRouterModel(m, buildAPIMessages(systemPrompt, HISTORY_MIN), maxTok);
-        const name = m.split('/')[1].replace(':free','');
-        showError(`已自動切換到 ${name}`);
+        const reply = await tryOpenRouterModel(m, buildAPIMessages(systemPrompt, HISTORY_TRIM), maxTok);
+        const prev = sessionStorage.getItem('auto_best_model');
+        sessionStorage.setItem('auto_best_model', m);
+        // 只在首次選定或切換模型時顯示通知
+        if (prev !== m) {
+          showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}`);
+        }
         return reply;
       } catch (e) {
         tried.push(`${m.split('/')[1]}: ${e.message}`);
+        if (m === lastGood) sessionStorage.removeItem('auto_best_model');
       }
     }
   }
 
-  throw new Error('全部失敗：\n' + tried.slice(0, 4).join('\n') + (config.autoFallback ? '' : '\n（可在設定開啟自動降級）'));
+  throw new Error('全部失敗：\n' + tried.slice(0, 4).join('\n'));
 }
 
 async function callAnthropic(systemPrompt, userMessage) {
