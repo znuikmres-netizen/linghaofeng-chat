@@ -1487,6 +1487,7 @@ function renderCharacterList() {
 function showHome() {
   state.currentCharId = null;
   state.messages = [];
+  renderCharacterList();
   homeView.classList.add('active');
   chatView.classList.remove('active');
   history.replaceState(null, '', '#');
