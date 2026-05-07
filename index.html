@@ -816,13 +816,27 @@
 
       <label>模型（⚡ 快速・🈶 中文優化・★ 推薦）</label>
       <select id="openrouter-model">
-        <option value="minimax/minimax-m2.5:free">⚡🈶★ MiniMax M2.5（免費・中文最佳・快）</option>
-        <option value="google/gemma-3-27b-it:free">⚡ Gemma 3 27B（免費・快・劇情穩定）</option>
-        <option value="z-ai/glm-4.5-air:free">⚡🈶 GLM 4.5 Air（免費・中文・快）</option>
-        <option value="qwen/qwen3-next-80b-a3b-instruct:free">🈶 Qwen3 80B（免費・中文強）</option>
-        <option value="openai/gpt-oss-120b:free">GPT-OSS 120B（免費・劇情完整）</option>
-        <option value="nousresearch/hermes-3-llama-3.1-405b:free">🐢 Hermes 3 405B（免費・RP 最強・最慢）</option>
-        <option value="anthropic/claude-sonnet-4.5">Claude Sonnet 4.5（付費）</option>
+        <optgroup label="⚡ 快速・中文優先">
+          <option value="minimax/minimax-m2.5:free">⚡🈶★ MiniMax M2.5（極快・繁中最佳）</option>
+          <option value="google/gemini-2.0-flash-exp:free">⚡ Gemini 2.0 Flash（極快・1M ctx）</option>
+          <option value="google/gemini-flash-1.5:free">⚡ Gemini 1.5 Flash（快・1M ctx）</option>
+          <option value="deepseek/deepseek-chat:free">⚡🈶 DeepSeek-V3（快・繁中自然）</option>
+          <option value="z-ai/glm-4.5-air:free">⚡🈶 GLM 4.5 Air（快・中文）</option>
+        </optgroup>
+        <optgroup label="★ 高品質・中等速度">
+          <option value="qwen/qwen-2.5-72b-instruct:free">🈶★ Qwen2.5 72B（繁中開源最佳）</option>
+          <option value="qwen/qwq-32b:free">🈶 QwQ 32B（中文推理強）</option>
+          <option value="google/gemma-3-27b-it:free">Gemma 3 27B（穩定・劇情佳）</option>
+          <option value="deepseek/deepseek-r1-distill-qwen-32b:free">🈶 DeepSeek R1+Qwen32B（推理）</option>
+          <option value="qwen/qwen3-next-80b-a3b-instruct:free">🈶 Qwen3 80B（中文強）</option>
+        </optgroup>
+        <optgroup label="🐢 大模型・最強但較慢">
+          <option value="openai/gpt-oss-120b:free">GPT-OSS 120B（劇情完整）</option>
+          <option value="nousresearch/hermes-3-llama-3.1-405b:free">🐢 Hermes 3 405B（RP 最強・最慢）</option>
+        </optgroup>
+        <optgroup label="💳 付費">
+          <option value="anthropic/claude-sonnet-4.5">Claude Sonnet 4.5（付費）</option>
+        </optgroup>
       </select>
     </div>
 
@@ -1614,10 +1628,19 @@ function processUserInput(rawText) {
 // ============================================
 // 速度排序（快 → 慢）：自動降級時依序嘗試
 const FALLBACK_MODELS = [
-  'minimax/minimax-m2.5:free',              // 中文最佳・快
-  'google/gemma-3-27b-it:free',             // 27B・快・穩定
-  'z-ai/glm-4.5-air:free',                  // 中文・快
-  'qwen/qwen3-next-80b-a3b-instruct:free',  // 中文強
+  // ── 快速・中文優先 ──
+  'minimax/minimax-m2.5:free',              // 中文最佳・極快
+  'google/gemini-2.0-flash-exp:free',       // Gemini 2.0 Flash・極快・1M ctx
+  'google/gemini-flash-1.5:free',           // Gemini 1.5 Flash・快・1M ctx
+  'deepseek/deepseek-chat:free',            // DeepSeek-V3・快・繁中自然
+  'z-ai/glm-4.5-air:free',                  // GLM 中文・快
+  // ── 中等速度・高品質 ──
+  'qwen/qwen-2.5-72b-instruct:free',        // Qwen2.5 72B・繁中最佳開源
+  'qwen/qwq-32b:free',                      // QwQ 32B・中文推理強
+  'google/gemma-3-27b-it:free',             // Gemma3 27B・穩定
+  'deepseek/deepseek-r1-distill-qwen-32b:free', // R1+Qwen32B・繁中推理
+  'qwen/qwen3-next-80b-a3b-instruct:free',  // Qwen3 80B・中文強
+  // ── 大模型・最強但較慢 ──
   'openai/gpt-oss-120b:free',               // 120B・劇情完整
   'nousresearch/hermes-3-llama-3.1-405b:free' // 405B 最慢但最強
 ];
