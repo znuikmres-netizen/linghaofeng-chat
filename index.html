@@ -324,6 +324,31 @@
   }
 
   /* 鎖定的角色卡 */
+  /* 💌 主動訊息標記 */
+  .proactive-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: linear-gradient(135deg, #FF6B9D, #C2185B);
+    color: #FFFFFF;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px 3px 6px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(194, 24, 91, 0.35);
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    z-index: 4;
+    animation: badgePulse 2s ease-in-out infinite;
+  }
+  @keyframes badgePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  .character-card { position: relative; }
+
   .character-card.locked {
     opacity: 0.6;
     cursor: not-allowed;
@@ -1287,6 +1312,33 @@ function getAffection(charId) {
   } catch (e) { return 0; }
 }
 
+// ── 主動訊息系統（每日最多 1 則）──
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+}
+function hasProactiveToday(charId) {
+  try { return localStorage.getItem('proactive_' + charId + '_' + todayKey()) === '1'; } catch(e) { return false; }
+}
+function setProactiveToday(charId) {
+  try { localStorage.setItem('proactive_' + charId + '_' + todayKey(), '1'); } catch(e) {}
+}
+function shouldShowProactive(charId) {
+  // 條件：解鎖 + 有互動歷史 + 最後互動 > 12 小時 + 今天還沒收過主動訊息
+  const last = getLastChatTime(charId);
+  if (!last) return false;
+  const hours = (Date.now() - last) / 3600000;
+  if (hours < 12) return false;
+  if (hasProactiveToday(charId)) return false;
+  // 必須要有訊息歷史（除了 initialHistory）
+  try {
+    const saved = localStorage.getItem('chat_history_' + charId);
+    if (!saved) return false;
+    const arr = JSON.parse(saved);
+    return Array.isArray(arr) && arr.length >= 3;  // 至少互動過 1-2 輪
+  } catch(e) { return false; }
+}
+
 function getLastChatTime(charId) {
   try { return parseInt(localStorage.getItem('lastchat_' + charId) || '0', 10); } catch (e) { return 0; }
 }
@@ -1396,6 +1448,7 @@ function renderCharacterList() {
     const unlocked = isUnlocked(char);
     const aff = getAffection(char.id);
     const affPercent = Math.round((aff / AFFECTION_MAX) * 100);
+    const showProactive = unlocked && shouldShowProactive(char.id);
 
     const card = document.createElement('div');
     card.className = 'character-card' + (unlocked ? '' : ' locked');
@@ -1414,7 +1467,10 @@ function renderCharacterList() {
       <span class="unlock-info">${unlockDateLabel(char)}</span>
     `;
 
+    const proactiveBadge = showProactive ? `<div class="proactive-badge">💌 新訊息</div>` : '';
+
     card.innerHTML = `
+      ${proactiveBadge}
       <div class="avatar online" style="background:${char.avatarGradient}">${avatarHTML(char)}</div>
       <div class="info">
         <div class="top">
@@ -1467,6 +1523,38 @@ function openChat(charId) {
 
   renderMessages();
   scrollToBottom();
+
+  // 主動訊息：背景 fetch（不阻擋進入聊天）
+  if (shouldShowProactive(charId)) {
+    setProactiveToday(charId); // 立即標記今天，避免重入
+    setTimeout(() => triggerProactiveMessage(char), 600);
+  }
+}
+
+// ── 觸發角色主動傳訊息 ──
+async function triggerProactiveMessage(char) {
+  // 確保仍在這個角色的聊天頁
+  if (state.currentCharId !== char.id) return;
+
+  showTyping();
+  try {
+    const hours = Math.round((Date.now() - getLastChatTime(char.id)) / 3600000);
+    const proactivePrompt = `【系統指令：主動傳訊息】請以「${char.name}」的身份，主動傳一句訊息給妳的女友。妳跟她已經 ${hours} 小時沒聯絡了。請用 50-100 字、可表達想念/吃醋/撩/關心，不要寫「在嗎」這種廢話開頭。場景延續最近的劇情狀態。`;
+    const rawReply = await callAI(char.systemPrompt, proactivePrompt);
+    const reply = toTraditional(rawReply);
+    removeTyping();
+
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
+    state.messages.push(botMsg);
+    renderMessage(botMsg);
+    scrollToBottom();
+    saveHistoryForCharacter(char.id);
+    setLastChatTime(char.id);
+  } catch (e) {
+    removeTyping();
+    // 主動訊息失敗就靜默；不打擾使用者
+    console.log('主動訊息生成失敗:', e.message);
+  }
 }
 
 // ============================================
@@ -2033,11 +2121,24 @@ const STRICT_RULES = `
 
 ═══════════════════════════════════════`;
 
+// ── 防重複：抽取最近 3 條 bot 訊息的開頭，動態加進 prompt ──
+function buildAntiRepeatHint() {
+  const recent = state.messages.filter(m => m.role === 'assistant').slice(-3);
+  if (recent.length === 0) return '';
+  const sigs = recent.map(m => {
+    const noNarr = (m.content || '').replace(/\*[^*]+\*/g, '').replace(/\s+/g, ' ').trim();
+    return noNarr.slice(0, 40);
+  }).filter(s => s);
+  if (!sigs.length) return '';
+  return `\n\n【★ 避免重複（最重要）★】\n你最近 ${sigs.length} 條訊息對話開頭：\n${sigs.map((s,i)=>`  ${i+1}. ${s}…`).join('\n')}\n這次的開頭、形容詞、動作、台詞句式都必須完全不同。`;
+}
+
 async function callAI(systemPrompt, userMessage) {
   const notes = getCharNotes(state.currentCharId);
   const notesSection = notes ? `\n\n【玩家劇情備忘錄（重要，每次必讀）】\n${notes}\n` : '';
   const affSection = affectionStageText(state.currentCharId);
-  const fullPrompt = systemPrompt + notesSection + affSection + STRICT_RULES;
+  const antiRepeat = buildAntiRepeatHint();
+  const fullPrompt = systemPrompt + notesSection + affSection + STRICT_RULES + antiRepeat;
   switch (config.provider) {
     case 'pollinations': return await callPollinations(fullPrompt, userMessage);
     case 'openrouter': return await callOpenRouter(fullPrompt, userMessage);
