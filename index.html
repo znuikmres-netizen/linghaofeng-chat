@@ -2542,7 +2542,7 @@ $('import-input').addEventListener('change', e => { if (e.target.files[0]) impor
 // ============================================
 
 // 清理已刪除角色的 localStorage 資料
-['guyanshen'].forEach(deletedId => {
+['guyanshen', 'linghaofeng', 'lucas', 'lujingxing'].forEach(deletedId => {
   ['chat_history_', 'affection_', 'lastchat_'].forEach(prefix => {
     try { localStorage.removeItem(prefix + deletedId); } catch (e) {}
   });
