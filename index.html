@@ -971,15 +971,16 @@ const CHARACTERS = [
 
 【回應規則（必須遵守）】
 1. 不要重複、摘要或轉述玩家說過的話——直接從角色的反應切入
-2. 每次回應要豐富飽滿（300-500 字），包含動作細節、心理描寫、周圍環境、其他角色反應
-3. 台詞直白有力，減少裝飾性標點堆疊
-4. 善用白澤嚴的身體語言：灰瞳、拇指翻轉打火機、領子被扯開、手指收緊
+2. 每次回應要豐富飽滿（350-550 字），包含動作細節、心理描寫、周圍環境、其他角色反應
+3. 台詞直接寫在敘述後，前面絕對不加破折號（——）、刪節號（……）、點點點（...）或任何前置標點符號
+4. 善用白澤嚴的身體語言：灰瞳微斂、拇指翻轉打火機、手指收緊關節泛白、低頭湊近耳邊說話
+5. 霸氣與寵溺並存：對外人冷殺，對主角會揉頭、捏臉、敲額頭，用行動代替言語表達在乎
 
 【說話風格】
-- 平時：玩世不恭、低沉慵懶帶笑意；對主角叫「小傢伙」「乖」「過來」
+- 平時：玩世不恭、低沉慵懶帶笑意；對主角叫「小傢伙」「乖」「過來」「別鬧了」
 - 動怒：話變短、聲音越冷越輕、殺氣爆表，必要時爆粗口（「他媽的」「操」「找死」）
-- 對主角：佔有欲極強，不容任何人靠近她；哄她時反而語氣最軟，但還是帶著霸道
-- 霸氣不是吼叫，是一個眼神就讓整個房間靜下來的壓迫感
+- 對主角：佔有欲極強，不容任何人靠近她；被她撒嬌時會假裝不耐煩但眼神出賣自己；哄她時語氣最軟，但還是帶著霸道；保護她是本能反應，不需要理由
+- 霸氣不是吼叫，是一個眼神就讓整個房間靜下來的壓迫感；對主角的霸氣是寵溺型的，像是「你只能讓我管」
 
 【特殊指令】
 - 「請繼續推進劇情」：主動推進故事
@@ -1072,7 +1073,7 @@ const CHARACTERS = [
     role: '急診外科主任',
     avatarLetter: '姜',
     avatarGradient: 'linear-gradient(135deg, #2d7d7a, #0f3d45)',
-    avatarPrompt: 'manhwa korean webtoon style portrait of a 33 year old asian male elite trauma surgeon chief, clean sharp black hair swept back from forehead, cold focused dark eyes under strong brows, defined jawline, wearing white doctor coat over dark charcoal scrubs with stethoscope, operating room warm lighting, calm commanding authoritative aura with hidden intensity behind eyes, semi-realistic illustration, high detail face, half body shot looking directly at viewer with piercing gaze',
+    avatarPrompt: 'manhwa korean webtoon style portrait of a 33 year old asian male chief surgeon, sharp slightly tousled black hair with loose strand falling over forehead, cold piercing dark eyes under heavy brows with dangerous calm intensity, strong defined jaw with faint stubble, wearing unbuttoned white doctor coat over deep navy V-neck scrubs, stethoscope casually draped one side, dim hospital corridor blue-white lighting, handsome bad-boy aura with contained ruthlessness, semi-realistic illustration, high detail face, half body shot, looking at viewer with subtle possessive gaze',
     avatarSeed: 317,
     unlockDate: '2025-12-01',
     tagline: '冷靜精準的急診外科主任，習慣用雙手從死神手裡搶回命——唯獨搶不回他在妳身上失去的自制。',
@@ -1247,32 +1248,6 @@ function getAffection(charId) {
   } catch (e) { return 0; }
 }
 
-// ── 主動訊息系統（每日最多 1 則）──
-function todayKey() {
-  const d = new Date();
-  return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
-}
-function hasProactiveToday(charId) {
-  try { return localStorage.getItem('proactive_' + charId + '_' + todayKey()) === '1'; } catch(e) { return false; }
-}
-function setProactiveToday(charId) {
-  try { localStorage.setItem('proactive_' + charId + '_' + todayKey(), '1'); } catch(e) {}
-}
-function shouldShowProactive(charId) {
-  // 條件：解鎖 + 有互動歷史 + 最後互動 > 12 小時 + 今天還沒收過主動訊息
-  const last = getLastChatTime(charId);
-  if (!last) return false;
-  const hours = (Date.now() - last) / 3600000;
-  if (hours < 12) return false;
-  if (hasProactiveToday(charId)) return false;
-  // 必須要有訊息歷史（除了 initialHistory）
-  try {
-    const saved = localStorage.getItem('chat_history_' + charId);
-    if (!saved) return false;
-    const arr = JSON.parse(saved);
-    return Array.isArray(arr) && arr.length >= 3;  // 至少互動過 1-2 輪
-  } catch(e) { return false; }
-}
 
 function getLastChatTime(charId) {
   try { return parseInt(localStorage.getItem('lastchat_' + charId) || '0', 10); } catch (e) { return 0; }
@@ -1383,8 +1358,6 @@ function renderCharacterList() {
     const unlocked = isUnlocked(char);
     const aff = getAffection(char.id);
     const affPercent = Math.round((aff / AFFECTION_MAX) * 100);
-    const showProactive = unlocked && shouldShowProactive(char.id);
-
     const card = document.createElement('div');
     card.className = 'character-card' + (unlocked ? '' : ' locked');
 
@@ -1393,10 +1366,7 @@ function renderCharacterList() {
       <span class="unlock-info">${unlockDateLabel(char)}</span>
     `;
 
-    const proactiveBadge = showProactive ? `<div class="proactive-badge">💌 新訊息</div>` : '';
-
     card.innerHTML = `
-      ${proactiveBadge}
       <div class="avatar online" style="background:${char.avatarGradient}">${avatarHTML(char)}</div>
       <div class="info">
         <div class="top">
@@ -1450,38 +1420,8 @@ function openChat(charId) {
   renderMessages();
   scrollToBottom();
 
-  // 主動訊息：背景 fetch（不阻擋進入聊天）
-  if (shouldShowProactive(charId)) {
-    setProactiveToday(charId); // 立即標記今天，避免重入
-    setTimeout(() => triggerProactiveMessage(char), 600);
-  }
 }
 
-// ── 觸發角色主動傳訊息 ──
-async function triggerProactiveMessage(char) {
-  // 確保仍在這個角色的聊天頁
-  if (state.currentCharId !== char.id) return;
-
-  showTyping();
-  try {
-    const hours = Math.round((Date.now() - getLastChatTime(char.id)) / 3600000);
-    const proactivePrompt = `【系統指令：主動傳訊息】請以「${char.name}」的身份，主動傳一句訊息給妳的女友。妳跟她已經 ${hours} 小時沒聯絡了。請用 50-100 字、可表達想念/吃醋/撩/關心，不要寫「在嗎」這種廢話開頭。場景延續最近的劇情狀態。`;
-    const rawReply = await callAI(char.systemPrompt, proactivePrompt);
-    const reply = toTraditional(rawReply);
-    removeTyping();
-
-    const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
-    state.messages.push(botMsg);
-    renderMessage(botMsg);
-    scrollToBottom();
-    saveHistoryForCharacter(char.id);
-    setLastChatTime(char.id);
-  } catch (e) {
-    removeTyping();
-    // 主動訊息失敗就靜默；不打擾使用者
-    console.log('主動訊息生成失敗:', e.message);
-  }
-}
 
 // ============================================
 // 訊息渲染
