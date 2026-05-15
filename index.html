@@ -842,25 +842,24 @@
       <label>模型（⚡ 快速・🈶 中文優化・★ 推薦）</label>
       <select id="openrouter-model">
         <option value="auto">🚀 自動選擇最快（推薦）</option>
-        <optgroup label="⚡ 快速・中文優先">
-          <option value="minimax/minimax-m2.5:free">⚡🈶★ MiniMax M2.5（極快・繁中最佳）</option>
-          <option value="moonshotai/kimi-k2:free">⚡🈶★ Kimi K2（極快・繁中旗艦）</option>
+        <optgroup label="⚡ 極快・首選">
+          <option value="google/gemini-flash-1.5:free">⚡★ Gemini 1.5 Flash（最穩・極快）</option>
+          <option value="google/gemini-2.0-flash-exp:free">⚡★ Gemini 2.0 Flash（極快・1M ctx）</option>
           <option value="deepseek/deepseek-chat-v3.1:free">⚡🈶 DeepSeek V3.1（快・最新）</option>
-          <option value="google/gemini-2.0-flash-exp:free">⚡ Gemini 2.0 Flash（極快・1M ctx）</option>
-          <option value="stepfun/step-3.5-flash:free">⚡🈶 Step-3.5 Flash（快・中文）</option>
-          <option value="z-ai/glm-4.5-air:free">⚡🈶 GLM 4.5 Air（快・中文）</option>
-          <option value="google/gemini-flash-1.5:free">⚡ Gemini 1.5 Flash（快・1M ctx）</option>
+          <option value="qwen/qwen3-32b:free">⚡🈶 Qwen3 32B（快・繁中強）</option>
+        </optgroup>
+        <optgroup label="⚡ 快速・中文優先">
+          <option value="minimax/minimax-m2.5:free">⚡🈶 MiniMax M2.5（繁中優化）</option>
+          <option value="moonshotai/kimi-k2:free">⚡🈶 Kimi K2（繁中旗艦）</option>
+          <option value="stepfun/step-3.5-flash:free">⚡🈶 Step-3.5 Flash（中文・快）</option>
+          <option value="z-ai/glm-4.5-air:free">⚡🈶 GLM 4.5 Air（中文・快）</option>
         </optgroup>
         <optgroup label="★ 高品質・中等速度">
-          <option value="qwen/qwen3-32b:free">🈶★ Qwen3 32B（快・繁中強）</option>
           <option value="qwen/qwen-2.5-72b-instruct:free">🈶★ Qwen2.5 72B（繁中開源最佳）</option>
           <option value="tencent/hunyuan-a13b-instruct:free">🈶 騰訊混元 A13B（中文 MoE）</option>
           <option value="thudm/glm-z1-32b:free">🈶 GLM-Z1 32B（推理・中文）</option>
           <option value="google/gemma-4-31b-it:free">Gemma 4 31B（最新 Google）</option>
-          <option value="qwen/qwq-32b:free">🈶 QwQ 32B（中文推理）</option>
-          <option value="deepseek/deepseek-r1-distill-qwen-32b:free">🈶 DeepSeek R1+Qwen32B（推理）</option>
           <option value="qwen/qwen3-next-80b-a3b-instruct:free">🈶 Qwen3 80B（中文強）</option>
-          <option value="google/gemma-3-27b-it:free">Gemma 3 27B（穩定・劇情佳）</option>
         </optgroup>
         <optgroup label="🐢 大模型・最強但較慢">
           <option value="qwen/qwen3-235b-a22b:free">🈶🐢 Qwen3 235B MoE（頂級中文）</option>
@@ -1780,27 +1779,31 @@ function processUserInput(rawText) {
 // ============================================
 // 速度排序（快 → 慢）：自動降級時依序嘗試
 const FALLBACK_MODELS = [
-  // ── 快速・中文優先 ──
-  'minimax/minimax-m2.5:free',              // 中文最佳・極快
-  'moonshotai/kimi-k2:free',               // Kimi K2・極快・繁中旗艦
-  'deepseek/deepseek-chat-v3.1:free',      // DeepSeek V3.1・快・最新
+  // ── 競速首選（穩定・極快）──
+  'google/gemini-flash-1.5:free',           // Gemini 1.5 Flash・極穩定・Google
   'google/gemini-2.0-flash-exp:free',       // Gemini 2.0 Flash・極快・1M ctx
+  'deepseek/deepseek-chat-v3.1:free',       // DeepSeek V3.1・快・最新
+  'qwen/qwen3-32b:free',                    // Qwen3 32B・快・繁中強
+  // ── 快速・中文優先 ──
+  'minimax/minimax-m2.5:free',              // MiniMax M2.5・中文・快
+  'moonshotai/kimi-k2:free',               // Kimi K2・繁中旗艦
   'stepfun/step-3.5-flash:free',           // Step-3.5 Flash・中文・快
-  'z-ai/glm-4.5-air:free',                  // GLM 4.5 Air・中文・快
+  'z-ai/glm-4.5-air:free',                 // GLM 4.5 Air・中文・快
   // ── 中等速度・高品質 ──
-  'qwen/qwen3-32b:free',                   // Qwen3 32B・快・繁中強
   'qwen/qwen-2.5-72b-instruct:free',        // Qwen2.5 72B・繁中開源最佳
   'tencent/hunyuan-a13b-instruct:free',    // 騰訊混元・中文 MoE
   'thudm/glm-z1-32b:free',                 // GLM-Z1 32B・推理・中文
   'google/gemma-4-31b-it:free',            // Gemma 4 31B・最新 Google
-  'qwen/qwen3-next-80b-a3b-instruct:free',  // Qwen3 80B・中文強
+  'qwen/qwen3-next-80b-a3b-instruct:free', // Qwen3 80B・中文強
   // ── 大模型・最強但較慢 ──
   'qwen/qwen3-235b-a22b:free',             // Qwen3 235B MoE・頂級中文
-  'openai/gpt-oss-120b:free',               // 120B・劇情完整
+  'openai/gpt-oss-120b:free',              // 120B・劇情完整
   'nousresearch/hermes-3-llama-3.1-405b:free' // 405B 最慢但最強
 ];
 
-const REQUEST_TIMEOUT = 35000;   // 35 秒（免費大模型需要更長等待時間）
+const REQUEST_TIMEOUT = 25000;   // 25 秒（一般請求逾時）
+const AUTO_RACE_TIMEOUT = 12000; // 12 秒（自動模式競速，快速淘汰慢模型）
+const AUTO_RACE_COUNT = 4;       // 並行競速前 N 個模型
 const MAX_TOKENS = 1200;          // 回應上限（中文約 800 字）
 const MAX_TOKENS_FAST = 800;      // 快速指令用
 const HISTORY_FULL = null;        // 不限
@@ -1868,7 +1871,7 @@ async function callPollinations(systemPrompt, userMessage) {
   throw new Error('Pollinations 失敗：\n' + tried.join('\n'));
 }
 
-async function tryOpenRouterModel(model, messages, maxTokens) {
+async function tryOpenRouterModel(model, messages, maxTokens, timeoutMs) {
   const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -1878,7 +1881,7 @@ async function tryOpenRouterModel(model, messages, maxTokens) {
       'X-Title': 'Lil Talk'
     },
     body: JSON.stringify({ model, messages, max_tokens: maxTokens || MAX_TOKENS })
-  });
+  }, timeoutMs || REQUEST_TIMEOUT);
 
   const data = await response.json().catch(() => ({}));
 
@@ -1918,28 +1921,42 @@ async function callOpenRouter(systemPrompt, userMessage) {
 
   // 自動模式 OR 指定模型全失敗後降級
   if (isAuto || config.autoFallback) {
-    // 從上次成功的模型開始，避免每次都重頭掃
     const lastGood = sessionStorage.getItem('auto_best_model');
     const startIdx = lastGood ? Math.max(0, FALLBACK_MODELS.indexOf(lastGood)) : 0;
     const ordered = startIdx > 0
       ? [...FALLBACK_MODELS.slice(startIdx), ...FALLBACK_MODELS.slice(0, startIdx)]
       : [...FALLBACK_MODELS];
 
-    const maxAttempts = isAuto ? ordered.length : 3;
-    let attempts = 0;
+    const msgs = buildAPIMessages(systemPrompt, HISTORY_TRIM);
 
-    for (const m of ordered) {
+    // ── 第一輪：並行競速前 N 個模型，誰最快回誰用 ──
+    const raceList = ordered.slice(0, AUTO_RACE_COUNT);
+    try {
+      const { reply, model: winner } = await Promise.any(
+        raceList.map(m =>
+          tryOpenRouterModel(m, msgs, maxTok, AUTO_RACE_TIMEOUT)
+            .then(reply => ({ reply, model: m }))
+        )
+      );
+      const prev = sessionStorage.getItem('auto_best_model');
+      sessionStorage.setItem('auto_best_model', winner);
+      if (prev !== winner) showError(`✓ 使用模型：${winner.split('/')[1].replace(':free', '')}`);
+      return reply;
+    } catch (raceErr) {
+      // 競速全部失敗（AggregateError），記下錯誤繼續
+      if (raceErr?.errors) raceList.forEach((m, i) => tried.push(`${m.split('/')[1]}: ${raceErr.errors[i]?.message || '失敗'}`));
+      if (lastGood && raceList.includes(lastGood)) sessionStorage.removeItem('auto_best_model');
+    }
+
+    // ── 第二輪：順序嘗試剩餘模型 ──
+    const remaining = isAuto ? ordered.slice(AUTO_RACE_COUNT) : ordered.slice(AUTO_RACE_COUNT, AUTO_RACE_COUNT + 3);
+    for (const m of remaining) {
       if (!isAuto && m === config.openrouterModel) continue;
-      if (attempts >= maxAttempts) break;
-      attempts++;
       try {
-        const reply = await tryOpenRouterModel(m, buildAPIMessages(systemPrompt, HISTORY_TRIM), maxTok);
+        const reply = await tryOpenRouterModel(m, msgs, maxTok, AUTO_RACE_TIMEOUT);
         const prev = sessionStorage.getItem('auto_best_model');
         sessionStorage.setItem('auto_best_model', m);
-        // 只在首次選定或切換模型時顯示通知
-        if (prev !== m) {
-          showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}`);
-        }
+        if (prev !== m) showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}`);
         return reply;
       } catch (e) {
         tried.push(`${m.split('/')[1]}: ${e.message}`);
