@@ -2383,7 +2383,7 @@ async function sendMessage(rawText) {
   scrollToBottom();
 
   inputEl.value = '';
-  inputEl.style.height = 'auto';
+  inputEl.style.height = '';
 
   showTyping();
 
@@ -2519,7 +2519,7 @@ inputEl.addEventListener('keydown', (e) => {
 });
 
 inputEl.addEventListener('input', () => {
-  inputEl.style.height = 'auto';
+  inputEl.style.height = '24px';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
 });
 
