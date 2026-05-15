@@ -584,12 +584,12 @@
 
   .input-wrapper {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 8px;
     background: #FFFFFF;
     border: 1px solid rgba(0, 0, 0, 0.06);
     border-radius: 22px;
-    padding: 6px 6px 6px 14px;
+    padding: 10px 6px 10px 14px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
   .input-wrapper:focus-within { border-color: rgba(0, 168, 132, 0.4); }
@@ -603,18 +603,18 @@
     font-size: 14.5px;
     font-family: inherit;
     resize: none;
-    height: 24px;
-    min-height: 24px;
-    max-height: 100px;
+    height: 22px;
+    min-height: 22px;
+    max-height: 88px;
     overflow-y: hidden;
-    padding: 6px 0;
-    line-height: 1.4;
+    padding: 0;
+    line-height: 1.5;
   }
   #input::placeholder { color: #8696A0; }
 
   .send-btn {
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     background: linear-gradient(135deg, #00A884, #008069);
     color: #fff;
@@ -1194,7 +1194,7 @@ const chatView = $('chat-view');
 const characterListEl = $('character-list');
 const messagesEl = $('messages');
 const inputEl = $('input');
-inputEl.style.height = '24px';
+inputEl.style.height = '22px';
 const sendBtn = $('send-btn');
 const advanceBtn = $('advance-btn');
 const newplotBtn = $('newplot-btn');
@@ -1446,7 +1446,7 @@ function openChat(charId) {
   history.replaceState(null, '', '#' + charId);
 
   inputEl.value = '';
-  inputEl.style.height = '24px';
+  inputEl.style.height = '22px';
   renderMessages();
   scrollToBottom();
 
@@ -2418,7 +2418,7 @@ async function sendMessage(rawText) {
     // 保留使用者輸入，讓玩家可以直接複製重送
     inputEl.value = rawText;
     inputEl.style.height = 'auto';
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 88) + 'px';
     scrollToBottom();
   } finally {
     setLoading(false);
@@ -2522,8 +2522,8 @@ inputEl.addEventListener('keydown', (e) => {
 });
 
 inputEl.addEventListener('input', () => {
-  inputEl.style.height = '24px';
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+  inputEl.style.height = '22px';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 88) + 'px';
 });
 
 advanceBtn.addEventListener('click', () => sendMessage('請繼續推進劇情'));
