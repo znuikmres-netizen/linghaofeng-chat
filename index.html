@@ -455,6 +455,8 @@
     display: flex;
     gap: 8px;
     max-width: 85%;
+    min-width: 0;
+    overflow: hidden;
   }
   .message.user .message-row { flex-direction: row-reverse; }
 
@@ -478,7 +480,9 @@
     line-height: 1.6;
     font-size: 14.5px;
     word-wrap: break-word;
+    overflow-wrap: anywhere;
     white-space: pre-wrap;
+    min-width: 0;
     font-weight: 600;          /* ← 對話預設粗體 */
     color: #111B21;            /* ← 對話黑色 */
   }
