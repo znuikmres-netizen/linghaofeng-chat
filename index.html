@@ -796,7 +796,7 @@
 
     <div class="input-area">
       <div class="input-wrapper">
-        <textarea id="input" placeholder="輸入訊息或 /動作/ ..." rows="1"></textarea>
+        <textarea id="input" placeholder="輸入訊息或 /動作/ ..."></textarea>
         <button class="send-btn" id="send-btn">➤</button>
       </div>
       <div class="tip">輸入 <code>/動作/</code> 來執行角色動作</div>
@@ -1194,6 +1194,7 @@ const chatView = $('chat-view');
 const characterListEl = $('character-list');
 const messagesEl = $('messages');
 const inputEl = $('input');
+inputEl.style.height = '24px';
 const sendBtn = $('send-btn');
 const advanceBtn = $('advance-btn');
 const newplotBtn = $('newplot-btn');
@@ -1444,6 +1445,8 @@ function openChat(charId) {
   chatView.classList.add('active');
   history.replaceState(null, '', '#' + charId);
 
+  inputEl.value = '';
+  inputEl.style.height = '24px';
   renderMessages();
   scrollToBottom();
 
@@ -2558,6 +2561,19 @@ $('import-input').addEventListener('change', e => { if (e.target.files[0]) impor
     try { localStorage.removeItem(prefix + deletedId); } catch (e) {}
   });
 });
+
+// 一次性遷移：清除含舊格式（🕐/♥️）的對話記錄，讓模型從正確格式的 initialHistory 重新開始
+if (!localStorage.getItem('format_migration_v2')) {
+  ['baizeyan', 'jiangchenyu'].forEach(id => {
+    try {
+      const raw = localStorage.getItem('chat_history_' + id);
+      if (raw && (raw.includes('🕐') || raw.includes('♥️'))) {
+        localStorage.removeItem('chat_history_' + id);
+      }
+    } catch (e) {}
+  });
+  localStorage.setItem('format_migration_v2', '1');
+}
 
 renderCharacterList();
 
