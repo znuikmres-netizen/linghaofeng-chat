@@ -2041,11 +2041,24 @@ async function callAI(systemPrompt, userMessage) {
   const affSection = affectionStageText(state.currentCharId);
   const antiRepeat = buildAntiRepeatHint();
   const fullPrompt = systemPrompt + notesSection + affSection + STRICT_RULES + antiRepeat;
-  switch (config.provider) {
-    case 'pollinations': return await callPollinations(fullPrompt, userMessage);
-    case 'openrouter': return await callOpenRouter(fullPrompt, userMessage);
-    case 'anthropic': return await callAnthropic(fullPrompt, userMessage);
-    default: return await callPollinations(fullPrompt, userMessage);
+
+  const isBalanceErr = (msg) =>
+    /402|insufficient|credit|billing|balance|余额/i.test(msg || '');
+
+  try {
+    switch (config.provider) {
+      case 'pollinations': return await callPollinations(fullPrompt, userMessage);
+      case 'openrouter':   return await callOpenRouter(fullPrompt, userMessage);
+      case 'anthropic':    return await callAnthropic(fullPrompt, userMessage);
+      default:             return await callPollinations(fullPrompt, userMessage);
+    }
+  } catch (err) {
+    // OpenRouter 餘額不足時自動降級到 Pollinations
+    if (config.provider === 'openrouter' && isBalanceErr(err.message)) {
+      showError('⚠ OpenRouter 餘額不足，已自動切換至 Pollinations 免費服務。');
+      return await callPollinations(fullPrompt, userMessage);
+    }
+    throw err;
   }
 }
 
@@ -2076,7 +2089,7 @@ function friendlyError(msg) {
   if (m.includes('401') || m.includes('unauthorized') || m.includes('invalid api key'))
     return 'API Key 無效，請到右上角設定重新確認';
   if (m.includes('402') || m.includes('credit') || m.includes('billing') || m.includes('insufficient'))
-    return 'API 額度不足，請確認帳戶餘額';
+    return '⚠ OpenRouter 餘額不足。已自動切換 Pollinations 免費服務，或請至 openrouter.ai 儲值（最低 $5）。';
   if (m.includes('503') || m.includes('overload') || m.includes('unavailable'))
     return '模型目前過載，請稍後再試或切換其他模型';
   if (m.includes('空回應') || m.includes('empty'))
