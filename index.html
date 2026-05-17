@@ -1741,7 +1741,8 @@ function removeTyping() {
 function showError(text) {
   errorEl.textContent = text;
   errorEl.classList.add('show');
-  setTimeout(() => errorEl.classList.remove('show'), 12000);
+  const ms = text.length > 80 ? 20000 : 12000;
+  setTimeout(() => errorEl.classList.remove('show'), ms);
 }
 
 // ============================================
@@ -2137,8 +2138,10 @@ function friendlyError(msg) {
     return '模型目前過載，請稍後再試或切換其他模型';
   if (m.includes('空回應') || m.includes('empty'))
     return '模型回傳空回應，請重新傳送或切換模型';
-  if (m.includes('全部失敗'))
-    return '所有備用模型均失敗，請確認 API Key 是否正確，或稍後再試';
+  if (m.includes('全部失敗')) {
+    const details = msg.split('\n').slice(1).filter(Boolean).join(' | ');
+    return '所有備用模型均失敗' + (details ? '：\n' + details : '') + '\n\n如持續發生，請切換至 Pollinations 或稍後再試。';
+  }
   return msg;
 }
 
