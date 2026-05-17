@@ -2096,10 +2096,14 @@ async function callAI(systemPrompt, userMessage) {
       default:             return await callPollinations(fullPrompt, userMessage);
     }
   } catch (err) {
-    // OpenRouter 餘額不足時自動降級到 Pollinations
-    if (config.provider === 'openrouter' && isBalanceErr(err.message)) {
-      showError('⚠ OpenRouter 餘額不足，已自動切換至 Pollinations 免費服務。');
-      return await callPollinations(fullPrompt, userMessage);
+    if (config.provider === 'openrouter') {
+      const isServiceDown = err.message.includes('全部失敗') ||
+                            err.message.toLowerCase().includes('no endpoints') ||
+                            isBalanceErr(err.message);
+      if (isServiceDown) {
+        showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
+        return await callPollinations(fullPrompt, userMessage);
+      }
     }
     throw err;
   }
