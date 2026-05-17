@@ -499,6 +499,12 @@
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   }
 
+  .bubble hr.status-sep {
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    margin: 8px 0 6px;
+  }
+
   /* 敘述（被 *星號* 包起來的）：斜體淺灰，非粗體 */
   .bubble .narration {
     color: #8696A0;
@@ -1663,6 +1669,7 @@ function toTraditional(text) {
 function formatMessage(text) {
   let t = toTraditional(text);
   t = escapeHTML(t);
+  t = t.replace(/^[─\-─]{4,}\s*$/gm, '<hr class="status-sep">');
   t = t.replace(/\*([^*]+)\*/g, '<span class="narration">$1</span>');
   return t;
 }
