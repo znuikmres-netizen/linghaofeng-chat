@@ -878,8 +878,12 @@
           <option value="openai/gpt-oss-120b:free">GPT-OSS 120B（劇情完整）</option>
           <option value="nousresearch/hermes-3-llama-3.1-405b:free">🐢 Hermes 3 405B（RP 最強・最慢）</option>
         </optgroup>
-        <optgroup label="💳 付費">
-          <option value="anthropic/claude-sonnet-4.5">Claude Sonnet 4.5（付費）</option>
+        <optgroup label="💳 付費（使用 OpenRouter 餘額，免費模型掛掉時最可靠）">
+          <option value="deepseek/deepseek-chat">💳🈶 DeepSeek Chat（付費・中文頂級・極低成本）</option>
+          <option value="openai/gpt-4o-mini">💳 GPT-4o Mini（付費・穩定快速）</option>
+          <option value="google/gemini-2.0-flash-thinking-exp">💳 Gemini 2.0 Flash Thinking（付費・推理強）</option>
+          <option value="anthropic/claude-haiku-4-5">💳 Claude Haiku 4.5（付費・品質高）</option>
+          <option value="anthropic/claude-sonnet-4.5">💳 Claude Sonnet 4.5（付費・最高品質）</option>
         </optgroup>
       </select>
     </div>
@@ -1758,22 +1762,20 @@ function processUserInput(rawText) {
 // ============================================
 // API providers
 // ============================================
-// 全部使用免費模型，依穩定性排序
+// 自動模式備援清單，依穩定性排序（與 Settings 模型選單保持同步）
 const FALLBACK_MODELS = [
-  'z-ai/glm-4.5-air:free',                    // ✅ 確認有效・極穩定
-  'minimax/minimax-m2.5:free',                // ✅ 確認有效
-  'deepseek/deepseek-r1:free',
-  'deepseek/deepseek-chat:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'qwen/qwen-2.5-72b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
-  'qwen/qwq-32b:free',
-  'moonshotai/kimi-k2:free',
-  'tencent/hunyuan-a13b-instruct:free',
-  'thudm/glm-z1-32b:free',
-  'qwen/qwen3-235b-a22b:free',
-  'meta-llama/llama-3.1-8b-instruct:free',
-  'nousresearch/hermes-3-llama-3.1-405b:free'
+  'google/gemini-flash-1.5:free',          // ★ 最穩・極快
+  'google/gemini-2.0-flash-exp:free',      // ★ 極快・1M ctx
+  'deepseek/deepseek-chat-v3.1:free',     // 中文優・最新版
+  'qwen/qwen3-32b:free',                   // 快・繁中強
+  'minimax/minimax-m2.5:free',            // 繁中優化
+  'moonshotai/kimi-k2:free',              // 繁中旗艦
+  'z-ai/glm-4.5-air:free',               // 中文・快
+  'stepfun/step-3.5-flash:free',          // 中文・快
+  'qwen/qwen-2.5-72b-instruct:free',      // 高品質
+  'tencent/hunyuan-a13b-instruct:free',   // 中文 MoE
+  'thudm/glm-z1-32b:free',               // 推理・中文
+  'qwen/qwen3-235b-a22b:free',            // 頂級中文
 ];
 
 const REQUEST_TIMEOUT = 25000;   // 25 秒（一般請求逾時）
