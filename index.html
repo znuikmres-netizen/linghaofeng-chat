@@ -1826,7 +1826,7 @@ function buildAPIMessages(systemPrompt, limit) {
 
 async function callPollinations(systemPrompt, userMessage) {
   const tried = [];
-  const models = ['openai-large', 'openai', 'mistral'];
+  const models = ['mistral', 'openai-large', 'openai'];  // mistral 最寬容，優先試
   const limits = [HISTORY_MIN, 4];
   for (const limit of limits) {
     for (const model of models) {
@@ -1943,9 +1943,15 @@ async function callOpenRouter(systemPrompt, userMessage) {
       }
     }
 
-    // ── 第三輪：歷史過長保護 — 縮短至最少歷史再試前幾個穩定模型 ──
+    // ── 第三輪：精簡歷史 + 多元模型（含西方模型，內容寬容度更高）──
     const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
-    for (const m of ordered.slice(0, 3)) {
+    const thirdRound = [
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'mistralai/mistral-7b-instruct:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      ...ordered.slice(0, 2)
+    ];
+    for (const m of thirdRound) {
       try {
         const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, REQUEST_TIMEOUT);
         sessionStorage.setItem('auto_best_model', m);
@@ -2091,21 +2097,32 @@ function buildAntiRepeatHint() {
 }
 
 async function callAI(systemPrompt, userMessage) {
-  const notesRaw = getCharNotes(state.currentCharId);
+  const charId = state.currentCharId;
+  const notesRaw = getCharNotes(charId);
   const MAX_NOTES_CHARS = 800;
   const notesTrimmed = notesRaw.length > MAX_NOTES_CHARS ? notesRaw.slice(0, MAX_NOTES_CHARS) + '…（略）' : notesRaw;
   const notesSection = notesTrimmed ? `\n\n【玩家劇情備忘錄（重要，每次必讀）】\n${notesTrimmed}\n` : '';
-  const affSection = affectionStageText(state.currentCharId);
+  const affSection = affectionStageText(charId);
   const antiRepeat = buildAntiRepeatHint();
   const fullPrompt = systemPrompt + notesSection + affSection + STRICT_RULES + antiRepeat;
 
   const isBalanceErr = (msg) =>
     /402|insufficient|credit|billing|balance|余额/i.test(msg || '');
 
+  // 此角色本 session 已確認 OpenRouter 無法服務，直接走 Pollinations 避免每次等待
+  const orFailedKey = 'or_failed_' + charId;
+  if (config.provider === 'openrouter' && sessionStorage.getItem(orFailedKey) === '1') {
+    return await callPollinations(fullPrompt, userMessage);
+  }
+
   try {
     switch (config.provider) {
       case 'pollinations': return await callPollinations(fullPrompt, userMessage);
-      case 'openrouter':   return await callOpenRouter(fullPrompt, userMessage);
+      case 'openrouter': {
+        const result = await callOpenRouter(fullPrompt, userMessage);
+        sessionStorage.removeItem(orFailedKey);  // 成功時清除失敗記錄
+        return result;
+      }
       case 'anthropic':    return await callAnthropic(fullPrompt, userMessage);
       default:             return await callPollinations(fullPrompt, userMessage);
     }
@@ -2119,6 +2136,7 @@ async function callAI(systemPrompt, userMessage) {
                             em.includes('maximum context') ||
                             isBalanceErr(err.message);
       if (isServiceDown) {
+        sessionStorage.setItem(orFailedKey, '1');  // 記住本 session 此角色失敗
         showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
         return await callPollinations(fullPrompt, userMessage);
       }
