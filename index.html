@@ -1922,7 +1922,8 @@ async function callOpenRouter(systemPrompt, userMessage) {
       );
       const prev = sessionStorage.getItem('auto_best_model');
       sessionStorage.setItem('auto_best_model', winner);
-      sessionStorage.removeItem('or_fallback_shown'); // OR 恢復正常，重置通知旗標
+      sessionStorage.removeItem('or_fallback_shown');  // OR 恢復，重置通知旗標
+      sessionStorage.removeItem('or_fail_count');      // 重置失敗計數
       if (prev !== winner) showError(`✓ 使用模型：${winner.split('/')[1].replace(':free', '')}`);
       return reply;
     } catch (raceErr) {
@@ -1966,6 +1967,7 @@ async function callOpenRouter(systemPrompt, userMessage) {
         )
       );
       sessionStorage.setItem('auto_best_model', winner);
+      sessionStorage.removeItem('or_fail_count');
       showError(`✓ 使用模型：${winner.split('/')[1].replace(':free', '')}（精簡模式）`);
       return reply;
     } catch (e3) {
@@ -2135,6 +2137,12 @@ async function callAI(systemPrompt, userMessage) {
   const isBalanceErr = (msg) =>
     /402|insufficient|credit|billing|balance|余额/i.test(msg || '');
 
+  // 若 OpenRouter 本次 session 已連續失敗 3 次，直接用 Pollinations 省去等待
+  const orFailCount = parseInt(sessionStorage.getItem('or_fail_count') || '0');
+  if (config.provider === 'openrouter' && orFailCount >= 3) {
+    return await callPollinations(fullPrompt, userMessage);
+  }
+
   try {
     switch (config.provider) {
       case 'pollinations': return await callPollinations(fullPrompt, userMessage);
@@ -2152,6 +2160,9 @@ async function callAI(systemPrompt, userMessage) {
                             em.includes('maximum context') ||
                             isBalanceErr(err.message);
       if (isServiceDown) {
+        // 累計失敗次數
+        const newCount = orFailCount + 1;
+        sessionStorage.setItem('or_fail_count', newCount.toString());
         // 只在首次通知，避免每則訊息都跳出警告
         if (!sessionStorage.getItem('or_fallback_shown')) {
           showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
