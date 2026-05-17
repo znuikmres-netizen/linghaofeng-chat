@@ -1777,7 +1777,8 @@ const FALLBACK_MODELS = [
 ];
 
 const REQUEST_TIMEOUT = 25000;   // 25 秒（一般請求逾時）
-const AUTO_RACE_TIMEOUT = 12000; // 12 秒（自動模式競速，快速淘汰慢模型）
+const AUTO_RACE_TIMEOUT = 20000; // 20 秒（並行競速，給 GLM/MiniMax 足夠時間）
+const AUTO_SEQ_TIMEOUT  = 12000; // 12 秒（順序嘗試，快速跳過無回應模型）
 const AUTO_RACE_COUNT = 4;       // 並行競速前 N 個模型
 const MAX_TOKENS = 1200;          // 回應上限（中文約 800 字）
 const MAX_TOKENS_FAST = 800;      // 快速指令用
@@ -1932,7 +1933,7 @@ async function callOpenRouter(systemPrompt, userMessage) {
     for (const m of remaining) {
       if (!isAuto && m === config.openrouterModel) continue;
       try {
-        const reply = await tryOpenRouterModel(m, msgs, maxTok, AUTO_RACE_TIMEOUT);
+        const reply = await tryOpenRouterModel(m, msgs, maxTok, AUTO_SEQ_TIMEOUT);
         const prev = sessionStorage.getItem('auto_best_model');
         sessionStorage.setItem('auto_best_model', m);
         if (prev !== m) showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}`);
@@ -1943,9 +1944,11 @@ async function callOpenRouter(systemPrompt, userMessage) {
       }
     }
 
-    // ── 第三輪：精簡歷史 + 西方模型（不重試已 timeout 的中文模型）──
+    // ── 第三輪：精簡歷史 + 放寬逾時（先重試主力模型，再嘗試西方模型）──
     const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
     const thirdRound = [
+      'z-ai/glm-4.5-air:free',
+      'minimax/minimax-m2.5:free',
       'meta-llama/llama-3.3-70b-instruct:free',
       'mistralai/mistral-7b-instruct:free',
       'nousresearch/hermes-3-llama-3.1-405b:free',
