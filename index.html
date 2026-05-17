@@ -1826,7 +1826,7 @@ function buildAPIMessages(systemPrompt, limit) {
 
 async function callPollinations(systemPrompt, userMessage) {
   const tried = [];
-  const models = ['mistral', 'openai-large', 'openai'];  // mistral 最寬容，優先試
+  const models = ['openai-large', 'openai', 'mistral'];  // openai-large 最快最穩，mistral 作為最後備援
   const limits = [HISTORY_MIN, 4];
   for (const limit of limits) {
     for (const model of models) {
@@ -1943,13 +1943,12 @@ async function callOpenRouter(systemPrompt, userMessage) {
       }
     }
 
-    // ── 第三輪：精簡歷史 + 多元模型（含西方模型，內容寬容度更高）──
+    // ── 第三輪：精簡歷史 + 西方模型（不重試已 timeout 的中文模型）──
     const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
     const thirdRound = [
       'meta-llama/llama-3.3-70b-instruct:free',
       'mistralai/mistral-7b-instruct:free',
       'nousresearch/hermes-3-llama-3.1-405b:free',
-      ...ordered.slice(0, 2)
     ];
     for (const m of thirdRound) {
       try {
