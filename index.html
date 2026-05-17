@@ -1942,6 +1942,19 @@ async function callOpenRouter(systemPrompt, userMessage) {
         if (m === lastGood) sessionStorage.removeItem('auto_best_model');
       }
     }
+
+    // ── 第三輪：歷史過長保護 — 縮短至最少歷史再試前幾個穩定模型 ──
+    const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
+    for (const m of ordered.slice(0, 3)) {
+      try {
+        const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, REQUEST_TIMEOUT);
+        sessionStorage.setItem('auto_best_model', m);
+        showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}（精簡模式）`);
+        return reply;
+      } catch (e) {
+        tried.push(`${m.split('/')[1]} 精簡: ${e.message}`);
+      }
+    }
   }
 
   throw new Error('全部失敗：\n' + tried.slice(0, 4).join('\n'));
@@ -2078,8 +2091,10 @@ function buildAntiRepeatHint() {
 }
 
 async function callAI(systemPrompt, userMessage) {
-  const notes = getCharNotes(state.currentCharId);
-  const notesSection = notes ? `\n\n【玩家劇情備忘錄（重要，每次必讀）】\n${notes}\n` : '';
+  const notesRaw = getCharNotes(state.currentCharId);
+  const MAX_NOTES_CHARS = 800;
+  const notesTrimmed = notesRaw.length > MAX_NOTES_CHARS ? notesRaw.slice(0, MAX_NOTES_CHARS) + '…（略）' : notesRaw;
+  const notesSection = notesTrimmed ? `\n\n【玩家劇情備忘錄（重要，每次必讀）】\n${notesTrimmed}\n` : '';
   const affSection = affectionStageText(state.currentCharId);
   const antiRepeat = buildAntiRepeatHint();
   const fullPrompt = systemPrompt + notesSection + affSection + STRICT_RULES + antiRepeat;
@@ -2096,8 +2111,12 @@ async function callAI(systemPrompt, userMessage) {
     }
   } catch (err) {
     if (config.provider === 'openrouter') {
+      const em = err.message.toLowerCase();
       const isServiceDown = err.message.includes('全部失敗') ||
-                            err.message.toLowerCase().includes('no endpoints') ||
+                            em.includes('no endpoints') ||
+                            em.includes('context_length') ||
+                            em.includes('too large') ||
+                            em.includes('maximum context') ||
                             isBalanceErr(err.message);
       if (isServiceDown) {
         showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
@@ -2140,6 +2159,8 @@ function friendlyError(msg) {
     return '模型目前過載，請稍後再試或切換其他模型';
   if (m.includes('空回應') || m.includes('empty'))
     return '模型回傳空回應，請重新傳送或切換模型';
+  if (m.includes('context_length') || m.includes('too large') || m.includes('maximum context'))
+    return '對話歷史過長，已自動精簡後重試，若仍失敗請清除部分對話記錄';
   if (m.includes('全部失敗') || m.includes('no endpoints'))
     return '模型服務暫時不可用，請稍後再試，或切換至 Pollinations 免費服務（右上角設定）。';
   if (m.includes('pollinations 失敗'))
