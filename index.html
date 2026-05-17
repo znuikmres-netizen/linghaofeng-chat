@@ -2108,20 +2108,10 @@ async function callAI(systemPrompt, userMessage) {
   const isBalanceErr = (msg) =>
     /402|insufficient|credit|billing|balance|余额/i.test(msg || '');
 
-  // 此角色本 session 已確認 OpenRouter 無法服務，直接走 Pollinations 避免每次等待
-  const orFailedKey = 'or_failed_' + charId;
-  if (config.provider === 'openrouter' && sessionStorage.getItem(orFailedKey) === '1') {
-    return await callPollinations(fullPrompt, userMessage);
-  }
-
   try {
     switch (config.provider) {
       case 'pollinations': return await callPollinations(fullPrompt, userMessage);
-      case 'openrouter': {
-        const result = await callOpenRouter(fullPrompt, userMessage);
-        sessionStorage.removeItem(orFailedKey);  // 成功時清除失敗記錄
-        return result;
-      }
+      case 'openrouter':   return await callOpenRouter(fullPrompt, userMessage);
       case 'anthropic':    return await callAnthropic(fullPrompt, userMessage);
       default:             return await callPollinations(fullPrompt, userMessage);
     }
@@ -2135,7 +2125,6 @@ async function callAI(systemPrompt, userMessage) {
                             em.includes('maximum context') ||
                             isBalanceErr(err.message);
       if (isServiceDown) {
-        sessionStorage.setItem(orFailedKey, '1');  // 記住本 session 此角色失敗
         showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
         return await callPollinations(fullPrompt, userMessage);
       }
