@@ -1830,21 +1830,25 @@ function buildAPIMessages(systemPrompt, limit) {
 
 async function callPollinations(systemPrompt, userMessage) {
   const tried = [];
-  for (const limit of [HISTORY_TRIM, HISTORY_MIN]) {
-    try {
-      const messages = buildAPIMessages(systemPrompt, limit);
-      const response = await fetchWithTimeout('https://text.pollinations.ai/openai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'openai', messages, private: true })
-      });
-      if (!response.ok) throw new Error('Pollinations ' + response.status);
-      const data = await response.json();
-      const reply = data.choices?.[0]?.message?.content;
-      if (!reply) throw new Error('空回應');
-      return reply;
-    } catch (e) {
-      tried.push(`歷史${limit}條: ${e.message}`);
+  const models = ['openai-large', 'openai', 'mistral'];
+  const limits = [HISTORY_MIN, 4];
+  for (const limit of limits) {
+    for (const model of models) {
+      try {
+        const messages = buildAPIMessages(systemPrompt, limit);
+        const response = await fetchWithTimeout('https://text.pollinations.ai/openai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, messages, max_tokens: MAX_TOKENS, private: true })
+        }, 30000);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        const reply = data.choices?.[0]?.message?.content;
+        if (!reply) throw new Error('空回應');
+        return reply;
+      } catch (e) {
+        tried.push(`${model}/${limit}條: ${e.message}`);
+      }
     }
   }
   throw new Error('Pollinations 失敗：\n' + tried.join('\n'));
@@ -2142,6 +2146,8 @@ function friendlyError(msg) {
     return '模型回傳空回應，請重新傳送或切換模型';
   if (m.includes('全部失敗') || m.includes('no endpoints'))
     return '模型服務暫時不可用，請稍後再試，或切換至 Pollinations 免費服務（右上角設定）。';
+  if (m.includes('pollinations 失敗'))
+    return 'Pollinations 服務暫時無法使用，請稍後再試。（OpenRouter 有額度可切換回去）';
   return msg;
 }
 
