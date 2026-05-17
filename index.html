@@ -1758,14 +1758,8 @@ function processUserInput(rawText) {
 // ============================================
 // API providers
 // ============================================
-// 有額度時優先用付費模型（穩定可靠），免費模型作備援
+// 全部使用免費模型，依穩定性排序
 const FALLBACK_MODELS = [
-  // ── 付費模型・有額度即可用・每次對話費用極低 ──
-  'deepseek/deepseek-chat',                   // DeepSeek V3・繁中最強・最便宜
-  'google/gemini-2.0-flash-001',              // Gemini 2.0 Flash・Google穩定
-  'deepseek/deepseek-r1',                     // DeepSeek R1・推理旗艦
-  'meta-llama/llama-3.3-70b-instruct',        // Llama 3.3 70B・穩定
-  // ── 免費模型・備援 ──
   'deepseek/deepseek-r1:free',
   'deepseek/deepseek-chat:free',
   'meta-llama/llama-3.3-70b-instruct:free',
