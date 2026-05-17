@@ -1908,9 +1908,11 @@ async function callOpenRouter(systemPrompt, userMessage) {
       : [...FALLBACK_MODELS];
 
     const msgs = buildAPIMessages(systemPrompt, HISTORY_TRIM);
+    const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
 
     // ── 第一輪：並行競速前 N 個模型，誰最快回誰用 ──
     const raceList = ordered.slice(0, AUTO_RACE_COUNT);
+    let raceTimeouts = 0;
     try {
       const { reply, model: winner } = await Promise.any(
         raceList.map(m =>
@@ -1920,47 +1922,69 @@ async function callOpenRouter(systemPrompt, userMessage) {
       );
       const prev = sessionStorage.getItem('auto_best_model');
       sessionStorage.setItem('auto_best_model', winner);
+      sessionStorage.removeItem('or_fallback_shown'); // OR 恢復正常，重置通知旗標
       if (prev !== winner) showError(`✓ 使用模型：${winner.split('/')[1].replace(':free', '')}`);
       return reply;
     } catch (raceErr) {
-      // 競速全部失敗（AggregateError），記下錯誤繼續
-      if (raceErr?.errors) raceList.forEach((m, i) => tried.push(`${m.split('/')[1]}: ${raceErr.errors[i]?.message || '失敗'}`));
+      if (raceErr?.errors) {
+        raceList.forEach((m, i) => {
+          const msg = raceErr.errors[i]?.message || '失敗';
+          tried.push(`${m.split('/')[1]}: ${msg}`);
+          if (msg.includes('逾時')) raceTimeouts++;
+        });
+      }
       if (lastGood && raceList.includes(lastGood)) sessionStorage.removeItem('auto_best_model');
     }
 
-    // ── 第二輪：順序嘗試剩餘模型 ──
-    const remaining = isAuto ? ordered.slice(AUTO_RACE_COUNT) : ordered.slice(AUTO_RACE_COUNT, AUTO_RACE_COUNT + 3);
-    for (const m of remaining) {
-      if (!isAuto && m === config.openrouterModel) continue;
-      try {
-        const reply = await tryOpenRouterModel(m, msgs, maxTok, AUTO_SEQ_TIMEOUT);
-        const prev = sessionStorage.getItem('auto_best_model');
-        sessionStorage.setItem('auto_best_model', m);
-        if (prev !== m) showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}`);
-        return reply;
-      } catch (e) {
-        tried.push(`${m.split('/')[1]}: ${e.message}`);
-        if (m === lastGood) sessionStorage.removeItem('auto_best_model');
+    // ── 第二輪：順序嘗試備用模型（競速有 2+ 個逾時代表服務繁忙，直接跳過避免長時間等待）──
+    if (raceTimeouts < 2) {
+      const remaining = isAuto
+        ? ordered.slice(AUTO_RACE_COUNT, AUTO_RACE_COUNT + 5)
+        : ordered.slice(AUTO_RACE_COUNT, AUTO_RACE_COUNT + 3);
+      for (const m of remaining) {
+        if (!isAuto && m === config.openrouterModel) continue;
+        try {
+          const reply = await tryOpenRouterModel(m, msgs, maxTok, AUTO_SEQ_TIMEOUT);
+          const prev = sessionStorage.getItem('auto_best_model');
+          sessionStorage.setItem('auto_best_model', m);
+          if (prev !== m) showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}`);
+          return reply;
+        } catch (e) {
+          tried.push(`${m.split('/')[1]}: ${e.message}`);
+          if (m === lastGood) sessionStorage.removeItem('auto_best_model');
+        }
       }
     }
 
-    // ── 第三輪：精簡歷史 + 放寬逾時（先重試主力模型，再嘗試西方模型）──
-    const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
-    const thirdRound = [
-      'z-ai/glm-4.5-air:free',
-      'minimax/minimax-m2.5:free',
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'mistralai/mistral-7b-instruct:free',
-      'nousresearch/hermes-3-llama-3.1-405b:free',
-    ];
-    for (const m of thirdRound) {
+    // ── 第三輪：主力模型精簡歷史並行重試（GLM + MiniMax，放寬逾時）──
+    try {
+      const mainModels = ['z-ai/glm-4.5-air:free', 'minimax/minimax-m2.5:free'];
+      const { reply, model: winner } = await Promise.any(
+        mainModels.map(m =>
+          tryOpenRouterModel(m, shortMsgs, maxTok, REQUEST_TIMEOUT)
+            .then(reply => ({ reply, model: m }))
+        )
+      );
+      sessionStorage.setItem('auto_best_model', winner);
+      showError(`✓ 使用模型：${winner.split('/')[1].replace(':free', '')}（精簡模式）`);
+      return reply;
+    } catch (e3) {
+      if (e3?.errors) {
+        ['z-ai/glm-4.5-air:free', 'minimax/minimax-m2.5:free'].forEach((m, i) =>
+          tried.push(`${m.split('/')[1]} 精簡: ${e3.errors[i]?.message || '失敗'}`)
+        );
+      }
+    }
+
+    // ── 第四輪：快速嘗試西方備援模型（通常立即失敗，幾乎不影響時間）──
+    for (const m of ['meta-llama/llama-3.3-70b-instruct:free', 'mistralai/mistral-7b-instruct:free']) {
       try {
-        const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, REQUEST_TIMEOUT);
+        const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, AUTO_SEQ_TIMEOUT);
         sessionStorage.setItem('auto_best_model', m);
-        showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}（精簡模式）`);
+        showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}（備援模式）`);
         return reply;
       } catch (e) {
-        tried.push(`${m.split('/')[1]} 精簡: ${e.message}`);
+        tried.push(`${m.split('/')[1]}: ${e.message}`);
       }
     }
   }
@@ -2128,7 +2152,11 @@ async function callAI(systemPrompt, userMessage) {
                             em.includes('maximum context') ||
                             isBalanceErr(err.message);
       if (isServiceDown) {
-        showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
+        // 只在首次通知，避免每則訊息都跳出警告
+        if (!sessionStorage.getItem('or_fallback_shown')) {
+          showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
+          sessionStorage.setItem('or_fallback_shown', '1');
+        }
         return await callPollinations(fullPrompt, userMessage);
       }
     }
