@@ -1758,27 +1758,26 @@ function processUserInput(rawText) {
 // ============================================
 // API providers
 // ============================================
-// 速度排序（快 → 慢）：自動降級時依序嘗試
+// 有額度時優先用付費模型（穩定可靠），免費模型作備援
 const FALLBACK_MODELS = [
-  // ── 競速首選（2025年驗證可用）──
-  'google/gemini-2.0-flash-lite-001:free',    // Gemini 2.0 Flash Lite・最快
-  'google/gemma-3-27b-it:free',               // Gemma 3 27B・Google穩定
-  'deepseek/deepseek-chat:free',              // DeepSeek Chat V3・快
-  'deepseek/deepseek-r1:free',               // DeepSeek R1・推理強
-  // ── 快速・中文優先 ──
-  'qwen/qwen-2.5-72b-instruct:free',         // Qwen2.5 72B・繁中最佳
-  'qwen/qwq-32b:free',                       // QwQ 32B・推理・中文
-  'meta-llama/llama-3.3-70b-instruct:free',  // Llama 3.3 70B・穩定
-  'moonshotai/kimi-k2:free',                 // Kimi K2・繁中旗艦
-  // ── 中等速度・高品質 ──
-  'mistralai/mistral-7b-instruct:free',      // Mistral 7B・極穩定備援
-  'microsoft/phi-4:free',                    // Phi-4・小而精
-  'tencent/hunyuan-a13b-instruct:free',      // 騰訊混元・中文
-  'thudm/glm-z1-32b:free',                  // GLM-Z1 32B・中文
-  // ── 大模型・最強但較慢 ──
-  'qwen/qwen3-235b-a22b:free',              // Qwen3 235B MoE・頂級中文
-  'meta-llama/llama-3.1-8b-instruct:free',  // Llama 3.1 8B・快速備援
-  'nousresearch/hermes-3-llama-3.1-405b:free' // 405B 最強備援
+  // ── 付費模型・有額度即可用・每次對話費用極低 ──
+  'deepseek/deepseek-chat',                   // DeepSeek V3・繁中最強・最便宜
+  'google/gemini-2.0-flash-001',              // Gemini 2.0 Flash・Google穩定
+  'deepseek/deepseek-r1',                     // DeepSeek R1・推理旗艦
+  'meta-llama/llama-3.3-70b-instruct',        // Llama 3.3 70B・穩定
+  // ── 免費模型・備援 ──
+  'deepseek/deepseek-r1:free',
+  'deepseek/deepseek-chat:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen-2.5-72b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+  'qwen/qwq-32b:free',
+  'moonshotai/kimi-k2:free',
+  'tencent/hunyuan-a13b-instruct:free',
+  'thudm/glm-z1-32b:free',
+  'qwen/qwen3-235b-a22b:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
+  'nousresearch/hermes-3-llama-3.1-405b:free'
 ];
 
 const REQUEST_TIMEOUT = 25000;   // 25 秒（一般請求逾時）
