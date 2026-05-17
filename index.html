@@ -1989,6 +1989,22 @@ async function callOpenRouter(systemPrompt, userMessage) {
         tried.push(`${m.split('/')[1]}: ${e.message}`);
       }
     }
+
+    // ── 付費備援：免費模型全部失敗，改用付費模型消耗 OpenRouter 餘額（每次約 $0.0003）──
+    const paidModels = ['deepseek/deepseek-chat', 'openai/gpt-4o-mini'];
+    for (const m of paidModels) {
+      try {
+        const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, REQUEST_TIMEOUT);
+        sessionStorage.setItem('auto_best_model', m);
+        sessionStorage.removeItem('or_fail_count');
+        showError(`✓ 使用模型：${m.split('/')[1]}（付費備援）`);
+        return reply;
+      } catch (e) {
+        tried.push(`${m.split('/')[1]}: ${e.message}`);
+        // 若餘額不足就停止，避免繼續嘗試其他付費模型
+        if (/402|insufficient|credit|billing|balance/i.test(e.message || '')) break;
+      }
+    }
   }
 
   throw new Error('全部失敗：\n' + tried.slice(0, 4).join('\n'));
@@ -2137,12 +2153,6 @@ async function callAI(systemPrompt, userMessage) {
   const isBalanceErr = (msg) =>
     /402|insufficient|credit|billing|balance|余额/i.test(msg || '');
 
-  // 若 OpenRouter 本次 session 已連續失敗 3 次，直接用 Pollinations 省去等待
-  const orFailCount = parseInt(sessionStorage.getItem('or_fail_count') || '0');
-  if (config.provider === 'openrouter' && orFailCount >= 3) {
-    return await callPollinations(fullPrompt, userMessage);
-  }
-
   try {
     switch (config.provider) {
       case 'pollinations': return await callPollinations(fullPrompt, userMessage);
@@ -2160,9 +2170,9 @@ async function callAI(systemPrompt, userMessage) {
                             em.includes('maximum context') ||
                             isBalanceErr(err.message);
       if (isServiceDown) {
-        // 累計失敗次數
-        const newCount = orFailCount + 1;
-        sessionStorage.setItem('or_fail_count', newCount.toString());
+        // 累計失敗次數（僅用於通知，不再用於跳過 OR）
+        const orFailCount = parseInt(sessionStorage.getItem('or_fail_count') || '0');
+        sessionStorage.setItem('or_fail_count', (orFailCount + 1).toString());
         // 只在首次通知，避免每則訊息都跳出警告
         if (!sessionStorage.getItem('or_fallback_shown')) {
           showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
