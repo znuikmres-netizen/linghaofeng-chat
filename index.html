@@ -1782,8 +1782,8 @@ const REQUEST_TIMEOUT = 25000;   // 25 秒（一般請求逾時）
 const AUTO_RACE_TIMEOUT = 20000; // 20 秒（並行競速，給 GLM/MiniMax 足夠時間）
 const AUTO_SEQ_TIMEOUT  = 12000; // 12 秒（順序嘗試，快速跳過無回應模型）
 const AUTO_RACE_COUNT = 4;       // 並行競速前 N 個模型
-const MAX_TOKENS = 1200;          // 回應上限（中文約 800 字）
-const MAX_TOKENS_FAST = 800;      // 快速指令用
+const MAX_TOKENS = 900;           // 回應上限（中文約 600 字，防止模型堆廢話）
+const MAX_TOKENS_FAST = 600;      // 快速指令用
 const HISTORY_FULL = null;        // 不限
 const HISTORY_TRIM = 30;          // 保留最近 30 條（個人使用不需省 context）
 const HISTORY_MIN = 6;            // 最短保留 6 條
@@ -1838,7 +1838,7 @@ async function callPollinations(systemPrompt, userMessage) {
         const response = await fetchWithTimeout('https://text.pollinations.ai/openai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages, max_tokens: MAX_TOKENS, private: true })
+          body: JSON.stringify({ model, messages, max_tokens: MAX_TOKENS, temperature: 0.85, frequency_penalty: 0.5, private: true })
         }, 30000);
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const data = await response.json();
@@ -1862,7 +1862,13 @@ async function tryOpenRouterModel(model, messages, maxTokens, timeoutMs) {
       'HTTP-Referer': window.location.origin,
       'X-Title': 'Lil Talk'
     },
-    body: JSON.stringify({ model, messages, max_tokens: maxTokens || MAX_TOKENS })
+    body: JSON.stringify({
+      model, messages,
+      max_tokens: maxTokens || MAX_TOKENS,
+      temperature: 0.85,
+      frequency_penalty: 0.5,  // 降低單詞重複率
+      presence_penalty: 0.3    // 鼓勵引入新話題
+    })
   }, timeoutMs || REQUEST_TIMEOUT);
 
   const data = await response.json().catch(() => ({}));
@@ -2068,7 +2074,15 @@ const STRICT_RULES = `
     - 重複自己上一條訊息裡已經用過的修辭（例如不要連兩條都用「灰綠的眼睛像琥珀」）
     - 反覆描述同一個動作（一次抬下巴就夠，不要每次都抬）
     - 用同樣的轉折句（如連續用「他終於勾起一個極淺的笑」）
+    - 用相同意思的句子重複表達同一件事（換個詞說一樣的話也算重複）
+    - 「觀望型」廢句：「他靜靜地看著妳」「沉默在空氣裡蔓延」「他沒有說話，只是看著她」整段沒有推進
    每次都要有新的細節、新的場景元素、新的對話走向。
+
+3a.【簡潔與邏輯・嚴格執行】
+    - 每一句話都必須推進情節或揭示新資訊，不允許存在純粹填充的「氣氛句」
+    - 同一情緒或反應，只描寫一次，不用三個角度重複強調（如不得同時寫眼神、手勢、呼吸都在「顫抖」）
+    - 角色每個行動和情緒轉折都需要因果依據，不能無故改變態度
+    - 回應字數嚴格控制在角色設定範圍內，寧可精短有力，不要塞滿篇幅
 
 4. 【場景連續性與劇情邏輯・最重要】絕對禁止無故改變當前的地點、時間點、或雙方的物理位置。在家就繼續在家、在車裡就繼續在車裡——除非玩家在自己訊息中明確描述了移動或時間跳躍，或玩家使用「新劇情」指令。每次回應前先確認：現在在哪裡？上一條訊息發生了什麼？必須從那個狀態直接延續。
 
@@ -2132,14 +2146,19 @@ const STRICT_RULES = `
 
 // ── 防重複：抽取最近 3 條 bot 訊息的開頭，動態加進 prompt ──
 function buildAntiRepeatHint() {
-  const recent = state.messages.filter(m => m.role === 'assistant').slice(-3);
+  const recent = state.messages.filter(m => m.role === 'assistant').slice(-4);
   if (recent.length === 0) return '';
   const sigs = recent.map(m => {
-    const noNarr = (m.content || '').replace(/\*[^*]+\*/g, '').replace(/\s+/g, ' ').trim();
-    return noNarr.slice(0, 40);
+    const content = m.content || '';
+    // 取第一句對話（移除敘述後的開頭）
+    const dialogue = content.replace(/\*[^*]+\*/g, '').replace(/\s+/g, ' ').trim().slice(0, 45);
+    // 取第一個敘述動作
+    const narrMatch = content.match(/\*([^*]{8,40})/);
+    const narr = narrMatch ? narrMatch[1].trim().slice(0, 35) : '';
+    return [dialogue, narr].filter(Boolean).join(' ／ ');
   }).filter(s => s);
   if (!sigs.length) return '';
-  return `\n\n【★ 避免重複（最重要）★】\n你最近 ${sigs.length} 條訊息對話開頭：\n${sigs.map((s,i)=>`  ${i+1}. ${s}…`).join('\n')}\n這次的開頭、形容詞、動作、台詞句式都必須完全不同。`;
+  return `\n\n【★ 嚴格禁止重複 ★】你最近 ${sigs.length} 條回覆摘要（對話開頭 ／ 第一個動作）：\n${sigs.map((s,i)=>`  ${i+1}. ${s}…`).join('\n')}\n⚠ 這次的開頭台詞、第一個動作、形容詞、句型必須和以上完全不同。`;
 }
 
 async function callAI(systemPrompt, userMessage) {
