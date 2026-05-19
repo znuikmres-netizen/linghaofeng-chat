@@ -2309,15 +2309,32 @@ async function buildSummaryFromHistory(charId) {
   ];
 
   if (config.provider === 'openrouter' && config.openrouterKey) {
-    const model = config.openrouterModel || FALLBACK_MODELS[0];
-    const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.openrouterKey },
-      body: JSON.stringify({ model, messages, max_tokens: 500 })
-    }, REQUEST_TIMEOUT);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
+    // 'auto' 不是有效的模型 ID，必須用真實模型名稱
+    const baseModel = (config.openrouterModel && config.openrouterModel !== 'auto')
+      ? config.openrouterModel : null;
+    // 依序嘗試：指定模型 → 免費備援 → 付費備援
+    const candidates = [
+      baseModel,
+      FALLBACK_MODELS[0],
+      FALLBACK_MODELS[1],
+      'deepseek/deepseek-chat',
+    ].filter(Boolean);
+
+    for (const model of candidates) {
+      try {
+        const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.openrouterKey,
+                     'HTTP-Referer': window.location.origin, 'X-Title': 'Lil Talk' },
+          body: JSON.stringify({ model, messages, max_tokens: 500 })
+        }, REQUEST_TIMEOUT);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      } catch(e) { /* 繼續嘗試下一個 */ }
+    }
+    return null;
   } else if (config.provider === 'pollinations') {
     const res = await fetchWithTimeout('https://text.pollinations.ai/openai', {
       method: 'POST',
@@ -2377,7 +2394,7 @@ async function manualAnalyzeNotes() {
 
 function notesStatusText(charId) {
   const ts = getNotesUpdatedAt(charId);
-  if (!ts) return '尚未自動分析（累積10則對話後自動觸發）';
+  if (!ts) return '尚未自動分析（累積5則對話後自動觸發）';
   const diff = Date.now() - ts;
   const m = Math.floor(diff / 60000);
   if (m < 1) return '上次自動更新：剛剛';
