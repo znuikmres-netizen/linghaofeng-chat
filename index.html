@@ -2271,7 +2271,12 @@ async function callAI(systemPrompt, userMessage) {
   const notesSection = notesTrimmed ? `\n\n【玩家劇情備忘錄（重要，每次必讀）】\n${notesTrimmed}\n` : '';
   const affSection = affectionStageText(charId);
   const antiRepeat = buildAntiRepeatHint();
-  const fullPrompt = systemPrompt + notesSection + affSection + STRICT_RULES + antiRepeat;
+  const formatReminder = `\n\n⚠【本次輸出格式最終確認・最高優先】
+同一場景的所有動作必須合在「一個」*星號段落*，用句號串連，禁止每個動作獨立一行或分成多個短星號段落。
+❌ 錯誤：*他走過來*（空行）*靠近妳*（空行）*開口*（空行）「...說。」
+✅ 正確：*他走過來，靠近妳，低頭開口。* 說什麼。
+台詞不加引號「」，不加「...」「……」「——」開頭，直接從第一個字寫起。`;
+  const fullPrompt = systemPrompt + notesSection + affSection + STRICT_RULES + antiRepeat + formatReminder;
 
   const isBalanceErr = (msg) =>
     /402|insufficient|credit|billing|balance|余额/i.test(msg || '');
