@@ -2308,7 +2308,9 @@ function fixResponseFormat(text) {
   }
   flush();
 
-  return (out.join('\n\n') + (tail ? '\n\n' + tail : '')).trim();
+  const result = (out.join('\n\n') + (tail ? '\n\n' + tail : '')).trim();
+  // 全域移除所有省略號（...  ……  …）
+  return result.replace(/…{1,}|\.{2,}/g, '');
 }
 
 async function callAI(systemPrompt, userMessage) {
