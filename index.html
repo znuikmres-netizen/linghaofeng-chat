@@ -2263,6 +2263,54 @@ function buildAntiRepeatHint() {
   return `\n\n【★ 嚴格禁止重複 ★】你最近 ${sigs.length} 條回覆摘要（對話開頭 ／ 第一個動作）：\n${sigs.map((s,i)=>`  ${i+1}. ${s}…`).join('\n')}\n⚠ 這次的開頭台詞、第一個動作、形容詞、句型必須和以上完全不同。`;
 }
 
+// ── 後處理：合併連續短星號段落，修正台詞引號與省略號 ──
+function fixResponseFormat(text) {
+  if (!text) return text;
+  // 保護狀態欄不被處理
+  const sepIdx = text.indexOf('──────────────────────────');
+  const main   = sepIdx !== -1 ? text.slice(0, sepIdx) : text;
+  const tail   = sepIdx !== -1 ? text.slice(sepIdx) : '';
+
+  const blocks = main.split(/\n{2,}/);
+  const out = [];
+  const starBuf = [];
+
+  const flush = () => {
+    if (!starBuf.length) return;
+    if (starBuf.length === 1) {
+      out.push('*' + starBuf[0] + '*');
+    } else {
+      // 清除每段末尾的標點再用頓號串接
+      const parts = starBuf.map(s => s.replace(/[，、。！？\s]+$/, '').trim());
+      let merged = parts.join('，');
+      if (!/[。！？]$/.test(merged)) merged += '。';
+      out.push('*' + merged + '*');
+    }
+    starBuf.length = 0;
+  };
+
+  for (const raw of blocks) {
+    const b = raw.trim();
+    if (!b) continue;
+    // 判斷是否為純星號段落（開頭結尾都是 *，且內容不含換行星號）
+    const m = b.match(/^\*([^*]+)\*$/);
+    if (m) {
+      starBuf.push(m[1].trim());
+    } else {
+      flush();
+      // 修正台詞：移除外層「」引號，移除開頭的 ... 或 ……
+      let line = b;
+      if (line.startsWith('「') && line.endsWith('」')) line = line.slice(1, -1);
+      if (line.startsWith('"')  && line.endsWith('"'))  line = line.slice(1, -1);
+      line = line.replace(/^[.…．\s]+/, '').trim();
+      if (line) out.push(line);
+    }
+  }
+  flush();
+
+  return (out.join('\n\n') + (tail ? '\n\n' + tail : '')).trim();
+}
+
 async function callAI(systemPrompt, userMessage) {
   const charId = state.currentCharId;
   const notesRaw = getCharNotes(charId);
@@ -2583,7 +2631,7 @@ async function regenerateLast() {
   setLoading(true);
   showTyping();
   try {
-    const reply = await callAI(char.systemPrompt, lastUserContent);
+    const reply = fixResponseFormat(await callAI(char.systemPrompt, lastUserContent));
     removeTyping();
     const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
     state.messages.push(botMsg);
@@ -2631,8 +2679,8 @@ async function sendMessage(rawText) {
 
   try {
     const rawReply = await callAI(char.systemPrompt, processed);
-    // 簡轉繁雙保險：儲存與顯示前都過濾一次
-    const reply = toTraditional(rawReply);
+    // 簡轉繁雙保險 + 格式後處理
+    const reply = fixResponseFormat(toTraditional(rawReply));
     removeTyping();
 
     const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
