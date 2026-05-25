@@ -851,37 +851,33 @@
         <span>模型失敗時自動嘗試其他免費模型</span>
       </label>
 
-      <label>模型（⚡ 快速・🈶 中文優化・★ 推薦）</label>
+      <label>模型（🈶 中文優化・⚡ 快速・★ 推薦）</label>
       <select id="openrouter-model">
-        <option value="auto">🚀 自動選擇最快（推薦）</option>
-        <optgroup label="⚡ 極快・首選">
-          <option value="google/gemini-flash-1.5:free">⚡★ Gemini 1.5 Flash（最穩・極快）</option>
-          <option value="google/gemini-2.0-flash-exp:free">⚡★ Gemini 2.0 Flash（極快・1M ctx）</option>
-          <option value="deepseek/deepseek-chat-v3.1:free">⚡🈶 DeepSeek V3.1（快・最新）</option>
-          <option value="qwen/qwen3-32b:free">⚡🈶 Qwen3 32B（快・繁中強）</option>
+        <option value="auto">🚀 自動選擇（優先中文劇情模型）</option>
+        <optgroup label="🈶★ 中文劇情最強・首選">
+          <option value="moonshotai/kimi-k2:free">🈶★⚡ Kimi K2（繁中旗艦・劇情感最強）</option>
+          <option value="deepseek/deepseek-chat-v3.1:free">🈶★⚡ DeepSeek V3.1（中文頂尖・穩定）</option>
+          <option value="qwen/qwen3-32b:free">🈶★⚡ Qwen3 32B（快・繁中強）</option>
+          <option value="minimax/minimax-m2.5:free">🈶★⚡ MiniMax M2.5（繁中優化）</option>
         </optgroup>
-        <optgroup label="⚡ 快速・中文優先">
-          <option value="minimax/minimax-m2.5:free">⚡🈶 MiniMax M2.5（繁中優化）</option>
-          <option value="moonshotai/kimi-k2:free">⚡🈶 Kimi K2（繁中旗艦）</option>
-          <option value="stepfun/step-3.5-flash:free">⚡🈶 Step-3.5 Flash（中文・快）</option>
-          <option value="z-ai/glm-4.5-air:free">⚡🈶 GLM 4.5 Air（中文・快）</option>
-        </optgroup>
-        <optgroup label="★ 高品質・中等速度">
-          <option value="qwen/qwen-2.5-72b-instruct:free">🈶★ Qwen2.5 72B（繁中開源最佳）</option>
+        <optgroup label="🈶 中文優化・快速">
+          <option value="z-ai/glm-4.5-air:free">🈶⚡ GLM 4.5 Air（中文・快）</option>
           <option value="tencent/hunyuan-a13b-instruct:free">🈶 騰訊混元 A13B（中文 MoE）</option>
+          <option value="qwen/qwen-2.5-72b-instruct:free">🈶 Qwen2.5 72B（繁中開源最佳）</option>
           <option value="thudm/glm-z1-32b:free">🈶 GLM-Z1 32B（推理・中文）</option>
-          <option value="google/gemma-4-31b-it:free">Gemma 4 31B（最新 Google）</option>
-          <option value="qwen/qwen3-next-80b-a3b-instruct:free">🈶 Qwen3 80B（中文強）</option>
+          <option value="stepfun/step-3.5-flash:free">🈶⚡ Step-3.5 Flash（中文・快）</option>
         </optgroup>
-        <optgroup label="🐢 大模型・最強但較慢">
+        <optgroup label="🐢 頂級中文・較慢">
           <option value="qwen/qwen3-235b-a22b:free">🈶🐢 Qwen3 235B MoE（頂級中文）</option>
-          <option value="openai/gpt-oss-120b:free">GPT-OSS 120B（劇情完整）</option>
           <option value="nousresearch/hermes-3-llama-3.1-405b:free">🐢 Hermes 3 405B（RP 最強・最慢）</option>
         </optgroup>
-        <optgroup label="💳 付費（使用 OpenRouter 餘額，免費模型掛掉時最可靠）">
+        <optgroup label="⚡ 穩定兜底（非中文優化）">
+          <option value="google/gemini-flash-1.5:free">⚡ Gemini 1.5 Flash（穩定快速）</option>
+          <option value="google/gemini-2.0-flash-exp:free">⚡ Gemini 2.0 Flash（1M ctx）</option>
+        </optgroup>
+        <optgroup label="💳 付費（使用 OpenRouter 餘額，最可靠）">
           <option value="deepseek/deepseek-chat">💳🈶 DeepSeek Chat（付費・中文頂級・極低成本）</option>
           <option value="openai/gpt-4o-mini">💳 GPT-4o Mini（付費・穩定快速）</option>
-          <option value="google/gemini-2.0-flash-thinking-exp">💳 Gemini 2.0 Flash Thinking（付費・推理強）</option>
           <option value="anthropic/claude-haiku-4-5">💳 Claude Haiku 4.5（付費・品質高）</option>
           <option value="anthropic/claude-sonnet-4.5">💳 Claude Sonnet 4.5（付費・最高品質）</option>
         </optgroup>
@@ -1867,18 +1863,18 @@ function processUserInput(rawText) {
 // ============================================
 // 自動模式備援清單，依穩定性排序（與 Settings 模型選單保持同步）
 const FALLBACK_MODELS = [
-  'google/gemini-flash-1.5:free',          // ★ 最穩・極快
-  'google/gemini-2.0-flash-exp:free',      // ★ 極快・1M ctx
-  'deepseek/deepseek-chat-v3.1:free',     // 中文優・最新版
-  'qwen/qwen3-32b:free',                   // 快・繁中強
-  'minimax/minimax-m2.5:free',            // 繁中優化
-  'moonshotai/kimi-k2:free',              // 繁中旗艦
-  'z-ai/glm-4.5-air:free',               // 中文・快
-  'stepfun/step-3.5-flash:free',          // 中文・快
-  'qwen/qwen-2.5-72b-instruct:free',      // 高品質
-  'tencent/hunyuan-a13b-instruct:free',   // 中文 MoE
-  'thudm/glm-z1-32b:free',               // 推理・中文
-  'qwen/qwen3-235b-a22b:free',            // 頂級中文
+  'moonshotai/kimi-k2:free',               // ★ 繁中旗艦・劇情感最強
+  'deepseek/deepseek-chat-v3.1:free',      // ★ 中文頂尖・穩定
+  'qwen/qwen3-32b:free',                   // ★ 快・繁中強
+  'minimax/minimax-m2.5:free',             // 繁中優化
+  'z-ai/glm-4.5-air:free',                // 中文・快
+  'tencent/hunyuan-a13b-instruct:free',    // 中文 MoE
+  'qwen/qwen-2.5-72b-instruct:free',       // 繁中開源最佳
+  'thudm/glm-z1-32b:free',                // 推理・中文
+  'stepfun/step-3.5-flash:free',           // 中文・快
+  'qwen/qwen3-235b-a22b:free',             // 頂級中文（較慢）
+  'google/gemini-flash-1.5:free',          // 穩定兜底
+  'google/gemini-2.0-flash-exp:free',      // 兜底
 ];
 
 const REQUEST_TIMEOUT = 25000;   // 25 秒（一般請求逾時）
@@ -2460,16 +2456,15 @@ async function buildSummaryFromHistory(charId) {
   ];
 
   if (config.provider === 'openrouter' && config.openrouterKey) {
-    // 'auto' 不是有效的模型 ID，必須用真實模型名稱
     const baseModel = (config.openrouterModel && config.openrouterModel !== 'auto')
       ? config.openrouterModel : null;
-    // 依序嘗試：指定模型 → 免費備援 → 付費備援
+    // 依序嘗試：指定模型 → 全部免費中文模型 → 付費備援（去重）
     const candidates = [
       baseModel,
-      FALLBACK_MODELS[0],
-      FALLBACK_MODELS[1],
+      ...FALLBACK_MODELS,
       'deepseek/deepseek-chat',
-    ].filter(Boolean);
+      'openai/gpt-4o-mini',
+    ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
 
     for (const model of candidates) {
       try {
@@ -2478,7 +2473,7 @@ async function buildSummaryFromHistory(charId) {
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.openrouterKey,
                      'HTTP-Referer': window.location.origin, 'X-Title': 'Lil Talk' },
           body: JSON.stringify({ model, messages, max_tokens: 500 })
-        }, REQUEST_TIMEOUT);
+        }, 15000); // 備忘錄用較短 timeout，快速換下一個
         if (!res.ok) continue;
         const data = await res.json();
         const text = data.choices?.[0]?.message?.content?.trim();
