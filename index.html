@@ -2435,21 +2435,22 @@ function shouldAutoUpdateNotes(charId) {
 async function buildSummaryFromHistory(charId) {
   const char = CHARACTERS.find(c => c.id === charId);
   if (!char) return null;
-  const history = state.messages.slice(-40); // 只用最近 40 條
+  const history = state.messages.slice(-20); // 只用最近 20 條（降低輸入長度）
   if (history.length < 4) return null;
 
-  const historyText = history.map(m =>
-    (m.role === 'user' ? '【玩家】' : `【${char.name}】`) + m.content
-  ).join('\n');
+  // 每條訊息截斷到 200 字，避免超出模型輸入限制
+  const historyText = history.map(m => {
+    const role = m.role === 'user' ? '【玩家】' : `【${char.name}】`;
+    const content = (m.content || '').slice(0, 200);
+    return role + content;
+  }).join('\n');
 
-  const summaryPrompt = `你是一個角色扮演故事記錄員，負責從對話記錄中整理重要劇情備忘錄。
-請閱讀以下對話，用繁體中文整理成結構化備忘錄（不超過300字），包含：
-1. 當前關係階段（例：陌生→好友→曖昧→戀人）
-2. 重要事件（最多6條，每條不超過25字）
-3. 角色特點（${char.name}的個性、習慣、偏好）
-4. 重要細節（約定、秘密、地點、稱呼等）
-
-只輸出備忘錄內文，不要其他說明。`;
+  const summaryPrompt = `閱讀以下對話，用繁體中文整理備忘錄（不超過250字）：
+1. 當前關係階段
+2. 重要事件（最多5條，每條不超過20字）
+3. 角色特點
+4. 重要細節（約定、稱呼、地點等）
+只輸出備忘錄，不要說明。`;
 
   const messages = [
     { role: 'user', content: `${summaryPrompt}\n\n【對話記錄】\n${historyText}` }
@@ -2458,7 +2459,6 @@ async function buildSummaryFromHistory(charId) {
   if (config.provider === 'openrouter' && config.openrouterKey) {
     const baseModel = (config.openrouterModel && config.openrouterModel !== 'auto')
       ? config.openrouterModel : null;
-    // 依序嘗試：指定模型 → 全部免費中文模型 → 付費備援（去重）
     const candidates = [
       baseModel,
       ...FALLBACK_MODELS,
@@ -2472,34 +2472,47 @@ async function buildSummaryFromHistory(charId) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.openrouterKey,
                      'HTTP-Referer': window.location.origin, 'X-Title': 'Lil Talk' },
-          body: JSON.stringify({ model, messages, max_tokens: 500 })
-        }, 15000); // 備忘錄用較短 timeout，快速換下一個
+          body: JSON.stringify({ model, messages, max_tokens: 400 })
+        }, 15000);
         if (!res.ok) continue;
         const data = await res.json();
         const text = data.choices?.[0]?.message?.content?.trim();
-        if (text) return text;
-      } catch(e) { /* 繼續嘗試下一個 */ }
+        if (text) return toTraditional(text);
+      } catch(e) { /* 繼續下一個 */ }
     }
-    return null;
-  } else if (config.provider === 'pollinations') {
+    // OpenRouter 全部失敗，用 Pollinations 兜底
+  }
+
+  // Pollinations 兜底（OpenRouter 失敗或其他 provider 都走這裡）
+  try {
     const res = await fetchWithTimeout('https://text.pollinations.ai/openai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'openai', messages, max_tokens: 500 })
-    }, REQUEST_TIMEOUT);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
-  } else if (config.provider === 'anthropic' && config.anthropicKey) {
-    const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': config.anthropicKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', messages, max_tokens: 500 })
-    }, REQUEST_TIMEOUT);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.content?.[0]?.text?.trim() || null;
+      body: JSON.stringify({ model: 'openai', messages, max_tokens: 400 })
+    }, 20000);
+    if (res.ok) {
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text) return toTraditional(text);
+    }
+  } catch(e) {}
+
+  if (config.provider === 'anthropic' && config.anthropicKey) {
+    try {
+      const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': config.anthropicKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', messages, max_tokens: 400 })
+      }, 20000);
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.content?.[0]?.text?.trim();
+        if (text) return toTraditional(text);
+      }
+    } catch(e) {}
   }
+
+  return null;
   return null;
 }
 
@@ -2507,7 +2520,7 @@ async function autoUpdateNotes(charId) {
   if (!shouldAutoUpdateNotes(charId)) return;
   const summary = await buildSummaryFromHistory(charId);
   if (!summary) return;
-  saveCharNotes(charId, summary);
+  saveCharNotes(charId, toTraditional(summary));
   saveNotesUpdatedAt(charId);
   saveNotesCount(charId, state.messages.filter(m => m.role === 'assistant').length);
 }
