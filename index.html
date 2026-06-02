@@ -1760,24 +1760,24 @@ function processUserInput(rawText) {
 const FALLBACK_MODELS = [
   'moonshotai/kimi-k2:free',               // ★ 繁中旗艦・劇情感最強
   'deepseek/deepseek-chat-v3.1:free',      // ★ 中文頂尖・穩定
-  'qwen/qwen3-32b:free',                   // ★ 快・繁中強
+  'qwen/qwen3-235b-a22b:free',             // ★ 頂級中文・劇情最豐富
+  'qwen/qwen3-32b:free',                   // 繁中快・品質穩定
+  'qwen/qwen-2.5-72b-instruct:free',       // 繁中開源
   'minimax/minimax-m2.5:free',             // 繁中優化
-  'z-ai/glm-4.5-air:free',                // 中文・快
   'tencent/hunyuan-a13b-instruct:free',    // 中文 MoE
-  'qwen/qwen-2.5-72b-instruct:free',       // 繁中開源最佳
+  'z-ai/glm-4.5-air:free',                // 中文・快
   'thudm/glm-z1-32b:free',                // 推理・中文
   'stepfun/step-3.5-flash:free',           // 中文・快
-  'qwen/qwen3-235b-a22b:free',             // 頂級中文（較慢）
   'google/gemini-flash-1.5:free',          // 穩定兜底
   'google/gemini-2.0-flash-exp:free',      // 兜底
 ];
 
-const REQUEST_TIMEOUT = 25000;   // 25 秒（一般請求逾時）
-const AUTO_RACE_TIMEOUT = 20000; // 20 秒（並行競速，給 GLM/MiniMax 足夠時間）
-const AUTO_SEQ_TIMEOUT  = 12000; // 12 秒（順序嘗試，快速跳過無回應模型）
-const AUTO_RACE_COUNT = 4;       // 並行競速前 N 個模型
-const MAX_TOKENS = 900;           // 回應上限（中文約 600 字，防止模型堆廢話）
-const MAX_TOKENS_FAST = 600;      // 快速指令用
+const REQUEST_TIMEOUT = 40000;   // 40 秒（給大模型足夠時間）
+const AUTO_RACE_TIMEOUT = 35000; // 35 秒（並行競速，讓 Kimi/DeepSeek/Qwen 有時間輸出）
+const AUTO_SEQ_TIMEOUT  = 20000; // 20 秒（順序嘗試）
+const AUTO_RACE_COUNT = 2;       // 只競速 Kimi K2 + DeepSeek，確保品質
+const MAX_TOKENS = 1400;          // 提升上限，允許更豐富的中文回應
+const MAX_TOKENS_FAST = 900;      // 快速指令用
 const HISTORY_FULL = null;        // 不限
 const HISTORY_TRIM = 30;          // 保留最近 30 條（個人使用不需省 context）
 const HISTORY_MIN = 6;            // 最短保留 6 條
@@ -1833,7 +1833,7 @@ async function callPollinations(systemPrompt, userMessage) {
         const response = await fetchWithTimeout('https://text.pollinations.ai/openai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages, max_tokens: MAX_TOKENS, temperature: 0.85, frequency_penalty: 0.5, private: true })
+          body: JSON.stringify({ model, messages, max_tokens: MAX_TOKENS, temperature: 0.92, frequency_penalty: 0.15, private: true })
         }, 30000);
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const data = await response.json();
@@ -1860,9 +1860,9 @@ async function tryOpenRouterModel(model, messages, maxTokens, timeoutMs) {
     body: JSON.stringify({
       model, messages,
       max_tokens: maxTokens || MAX_TOKENS,
-      temperature: 0.85,
-      frequency_penalty: 0.5,  // 降低單詞重複率
-      presence_penalty: 0.3    // 鼓勵引入新話題
+      temperature: 0.92,
+      frequency_penalty: 0.15,
+      presence_penalty: 0.1
     })
   }, timeoutMs || REQUEST_TIMEOUT);
 
