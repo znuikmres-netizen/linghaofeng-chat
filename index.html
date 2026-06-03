@@ -1785,10 +1785,30 @@ function removeTyping() {
 }
 
 function showError(text) {
+  if (errorEl._hideTimer) clearTimeout(errorEl._hideTimer);
   errorEl.textContent = text;
   errorEl.classList.add('show');
   const ms = text.length > 80 ? 20000 : 12000;
-  setTimeout(() => errorEl.classList.remove('show'), ms);
+  errorEl._hideTimer = setTimeout(() => errorEl.classList.remove('show'), ms);
+}
+function hideError() {
+  if (errorEl._hideTimer) { clearTimeout(errorEl._hideTimer); errorEl._hideTimer = null; }
+  errorEl.classList.remove('show');
+}
+
+// 記錄被限速的模型（sessionStorage，3 分鐘窗口）
+const RL_WINDOW = 3 * 60 * 1000;
+function markRL(model) {
+  try { sessionStorage.setItem('rl_' + model, Date.now()); } catch(e) {}
+}
+function isRL(model) {
+  try {
+    const ts = parseInt(sessionStorage.getItem('rl_' + model) || '0');
+    if (!ts) return false;
+    if (Date.now() - ts < RL_WINDOW) return true;
+    sessionStorage.removeItem('rl_' + model);
+    return false;
+  } catch(e) { return false; }
 }
 
 // ============================================
@@ -1918,6 +1938,7 @@ async function tryOpenRouterModel(model, messages, maxTokens, timeoutMs) {
 
   if (!response.ok) {
     const detail = data.error?.message || data.error?.code || `HTTP ${response.status}`;
+    if (response.status === 429) markRL(model);
     throw new Error(detail);
   }
   if (data.error) throw new Error(data.error.message || data.error.code || JSON.stringify(data.error));
@@ -1954,9 +1975,13 @@ async function callOpenRouter(systemPrompt, userMessage) {
   if (isAuto || config.autoFallback) {
     const lastGood = sessionStorage.getItem('auto_best_model');
     const startIdx = lastGood ? Math.max(0, FALLBACK_MODELS.indexOf(lastGood)) : 0;
-    const ordered = startIdx > 0
+    let ordered = startIdx > 0
       ? [...FALLBACK_MODELS.slice(startIdx), ...FALLBACK_MODELS.slice(0, startIdx)]
       : [...FALLBACK_MODELS];
+    // 過濾掉目前被限速的模型；若全部被限速則清除紀錄重新來過
+    const available = ordered.filter(m => !isRL(m));
+    if (available.length >= 1) ordered = available;
+    else { FALLBACK_MODELS.forEach(m => sessionStorage.removeItem('rl_' + m)); }
 
     const msgs = buildAPIMessages(systemPrompt, HISTORY_TRIM);
     const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
@@ -2686,14 +2711,36 @@ async function sendMessage(rawText) {
     autoUpdateNotes(char.id).catch(() => {});
   } catch (err) {
     removeTyping();
-    showError(friendlyError(err.message));
     state.messages.pop();
     renderMessages();
-    // 保留使用者輸入，讓玩家可以直接複製重送
+    scrollToBottom();
+
+    const isRateLimit = /rate.limit|429|too.many.request|頻率過高/i.test(err.message || '');
+    if (isRateLimit) {
+      // 自動倒數 30 秒後重試，不需要使用者手動操作
+      setLoading(false);
+      let secs = 30;
+      const tick = () => {
+        if (errorEl._hideTimer) { clearTimeout(errorEl._hideTimer); errorEl._hideTimer = null; }
+        errorEl.textContent = `模型使用頻率過高，${secs} 秒後自動重試…`;
+        errorEl.classList.add('show');
+        if (secs <= 0) {
+          errorEl.classList.remove('show');
+          sendMessage(rawText);
+        } else {
+          secs--;
+          errorEl._hideTimer = setTimeout(tick, 1000);
+        }
+      };
+      tick();
+      return;
+    }
+
+    // 非限速錯誤：顯示錯誤並讓使用者重送
+    showError(friendlyError(err.message));
     inputEl.value = rawText;
     inputEl.style.height = 'auto';
     inputEl.style.height = Math.min(inputEl.scrollHeight, 88) + 'px';
-    scrollToBottom();
   } finally {
     setLoading(false);
   }
