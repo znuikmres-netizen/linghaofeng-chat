@@ -1841,10 +1841,10 @@ const FALLBACK_MODELS = [
 ];
 // 有儲值時優先用付費版（無頻率限制，消耗 OpenRouter 餘額）
 const PAID_MODELS = [
-  'moonshotai/kimi-k2',
-  'deepseek/deepseek-chat',
-  'qwen/qwen3-235b-a22b',
-  'qwen/qwen3-32b',
+  'deepseek/deepseek-chat',        // DeepSeek V3・中文頂尖・確定可用
+  'qwen/qwen3-235b-a22b',          // Qwen3 235B・頂級中文
+  'moonshotai/kimi-k2',            // Kimi K2・繁中旗艦
+  'openai/gpt-4o-mini',            // 穩定兜底・確定可用
 ];
 
 const REQUEST_TIMEOUT = 40000;   // 40 秒（給大模型足夠時間）
@@ -1908,7 +1908,7 @@ async function callPollinations(systemPrompt, userMessage) {
         const response = await fetchWithTimeout('https://text.pollinations.ai/openai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages, max_tokens: MAX_TOKENS, temperature: 0.92, frequency_penalty: 0.15, private: true })
+          body: JSON.stringify({ model, messages, max_tokens: 700, temperature: 0.92, private: true })
         }, 30000);
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const data = await response.json();
@@ -1935,9 +1935,7 @@ async function tryOpenRouterModel(model, messages, maxTokens, timeoutMs) {
     body: JSON.stringify({
       model, messages,
       max_tokens: maxTokens || MAX_TOKENS,
-      temperature: 0.92,
-      frequency_penalty: 0.15,
-      presence_penalty: 0.1
+      temperature: 0.92
     })
   }, timeoutMs || REQUEST_TIMEOUT);
 
