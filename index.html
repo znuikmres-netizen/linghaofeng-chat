@@ -1839,6 +1839,13 @@ const FALLBACK_MODELS = [
   'google/gemini-flash-1.5:free',          // 穩定兜底
   'google/gemini-2.0-flash-exp:free',      // 兜底
 ];
+// 有儲值時優先用付費版（無頻率限制，消耗 OpenRouter 餘額）
+const PAID_MODELS = [
+  'moonshotai/kimi-k2',
+  'deepseek/deepseek-chat',
+  'qwen/qwen3-235b-a22b',
+  'qwen/qwen3-32b',
+];
 
 const REQUEST_TIMEOUT = 40000;   // 40 秒（給大模型足夠時間）
 const AUTO_RACE_TIMEOUT = 35000; // 35 秒（並行競速，讓 Kimi/DeepSeek/Qwen 有時間輸出）
@@ -1974,14 +1981,28 @@ async function callOpenRouter(systemPrompt, userMessage) {
   // 自動模式 OR 指定模型全失敗後降級
   if (isAuto || config.autoFallback) {
     const lastGood = sessionStorage.getItem('auto_best_model');
-    const startIdx = lastGood ? Math.max(0, FALLBACK_MODELS.indexOf(lastGood)) : 0;
-    let ordered = startIdx > 0
-      ? [...FALLBACK_MODELS.slice(startIdx), ...FALLBACK_MODELS.slice(0, startIdx)]
-      : [...FALLBACK_MODELS];
+    // 有 key 時：付費版模型（無頻率限制）優先，免費版作備援
+    let ordered;
+    if (config.openrouterKey) {
+      const freeFallbacks = FALLBACK_MODELS.filter(
+        m => !PAID_MODELS.some(p => m.startsWith(p + ':') || m === p)
+      );
+      ordered = [...PAID_MODELS, ...freeFallbacks];
+      // 如果上次成功的模型已知，把它提到最前面
+      if (lastGood && ordered.includes(lastGood)) {
+        ordered = [lastGood, ...ordered.filter(m => m !== lastGood)];
+      }
+    } else {
+      const startIdx = lastGood ? Math.max(0, FALLBACK_MODELS.indexOf(lastGood)) : 0;
+      ordered = startIdx > 0
+        ? [...FALLBACK_MODELS.slice(startIdx), ...FALLBACK_MODELS.slice(0, startIdx)]
+        : [...FALLBACK_MODELS];
+    }
     // 過濾掉目前被限速的模型；若全部被限速則清除紀錄重新來過
+    const allModels = config.openrouterKey ? [...PAID_MODELS, ...FALLBACK_MODELS] : FALLBACK_MODELS;
     const available = ordered.filter(m => !isRL(m));
     if (available.length >= 1) ordered = available;
-    else { FALLBACK_MODELS.forEach(m => sessionStorage.removeItem('rl_' + m)); }
+    else { allModels.forEach(m => sessionStorage.removeItem('rl_' + m)); }
 
     const msgs = buildAPIMessages(systemPrompt, HISTORY_TRIM);
     const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
@@ -2066,8 +2087,10 @@ async function callOpenRouter(systemPrompt, userMessage) {
       }
     }
 
-    // ── 付費備援：免費模型全部失敗，改用付費模型消耗 OpenRouter 餘額（每次約 $0.0003）──
-    const paidModels = ['deepseek/deepseek-chat', 'openai/gpt-4o-mini'];
+    // ── 付費備援：免費模型全部失敗，改用付費模型消耗 OpenRouter 餘額──
+    const paidModels = config.openrouterKey
+      ? ['moonshotai/kimi-k2', 'deepseek/deepseek-chat', 'qwen/qwen3-235b-a22b', 'openai/gpt-4o-mini']
+      : ['deepseek/deepseek-chat', 'openai/gpt-4o-mini'];
     for (const m of paidModels) {
       try {
         const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, REQUEST_TIMEOUT);
