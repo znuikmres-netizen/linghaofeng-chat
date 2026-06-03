@@ -2379,6 +2379,11 @@ function setLoading(on) {
 function friendlyError(msg) {
   if (!msg) return '未知錯誤，請稍後再試';
   const m = msg.toLowerCase();
+  // 先比對複合錯誤（含子訊息的包裝錯誤），避免被子訊息的 HTTP 代碼誤判
+  if (m.includes('pollinations 失敗'))
+    return 'Pollinations 服務暫時無法使用，請稍後再試。（OpenRouter 有額度可切換回去）';
+  if (m.includes('全部失敗') || m.includes('no endpoints'))
+    return '模型服務暫時不可用，請稍後再試，或切換至 Pollinations 免費服務（右上角設定）。';
   if (m.includes('timeout') || m.includes('abort') || m.includes('逾時'))
     return '模型回應逾時（免費模型有時較慢），請稍後再試或切換較快的模型';
   if (m.includes('network') || m.includes('networkerror') || m.includes('failed to fetch') || m.includes('網路'))
@@ -2395,10 +2400,6 @@ function friendlyError(msg) {
     return '模型回傳空回應，請重新傳送或切換模型';
   if (m.includes('context_length') || m.includes('too large') || m.includes('maximum context'))
     return '對話歷史過長，已自動精簡後重試，若仍失敗請清除部分對話記錄';
-  if (m.includes('全部失敗') || m.includes('no endpoints'))
-    return '模型服務暫時不可用，請稍後再試，或切換至 Pollinations 免費服務（右上角設定）。';
-  if (m.includes('pollinations 失敗'))
-    return 'Pollinations 服務暫時無法使用，請稍後再試。（OpenRouter 有額度可切換回去）';
   return msg;
 }
 
