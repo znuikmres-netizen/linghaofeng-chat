@@ -1840,11 +1840,10 @@ const FALLBACK_MODELS = [
   'google/gemini-2.0-flash-exp:free',      // 兜底
 ];
 // 有儲值時優先用付費版（無頻率限制，消耗 OpenRouter 餘額）
+// 只放確定在 OpenRouter 有付費版的模型
 const PAID_MODELS = [
-  'deepseek/deepseek-chat',        // DeepSeek V3・中文頂尖・確定可用
-  'qwen/qwen3-235b-a22b',          // Qwen3 235B・頂級中文
-  'moonshotai/kimi-k2',            // Kimi K2・繁中旗艦
-  'openai/gpt-4o-mini',            // 穩定兜底・確定可用
+  'deepseek/deepseek-chat',        // ✓ DeepSeek V3 付費版
+  'openai/gpt-4o-mini',            // ✓ GPT-4o mini 付費版
 ];
 
 const REQUEST_TIMEOUT = 40000;   // 40 秒（給大模型足夠時間）
@@ -2339,20 +2338,16 @@ async function callAI(systemPrompt, userMessage) {
   } catch (err) {
     if (config.provider === 'openrouter') {
       const em = err.message.toLowerCase();
-      // 金鑰錯誤直接顯示，其他所有錯誤（限速、服務異常等）立即切換 Pollinations
-      const isAuthError = em.includes('需要設定') || em.includes('401') ||
-                          em.includes('unauthorized') || em.includes('invalid api key');
-      if (!isAuthError) {
-        try {
-          if (!sessionStorage.getItem('or_fallback_shown')) {
-            showError('⚠ OpenRouter 模型受限，已切換 Pollinations 繼續服務。');
-            sessionStorage.setItem('or_fallback_shown', '1');
-          }
-          return await callPollinations(fullPrompt, userMessage);
-        } catch (polErr) {
-          // Pollinations 也失敗時拋出 Pollinations 的錯誤（有更清楚的訊息）
-          throw polErr;
+      const isBalanceErr = /402|insufficient|credit|billing|balance|余额/i.test(err.message);
+      const isServiceDown = em.includes('全部失敗') || em.includes('no endpoints') ||
+                            em.includes('context_length') || em.includes('too large') ||
+                            em.includes('maximum context') || isBalanceErr;
+      if (isServiceDown) {
+        if (!sessionStorage.getItem('or_fallback_shown')) {
+          showError('⚠ OpenRouter 暫時無法使用，已切換 Pollinations 繼續服務。');
+          sessionStorage.setItem('or_fallback_shown', '1');
         }
+        return await callPollinations(fullPrompt, userMessage);
       }
     }
     throw err;
@@ -2387,7 +2382,7 @@ function friendlyError(msg) {
   if (m.includes('network') || m.includes('networkerror') || m.includes('failed to fetch') || m.includes('網路'))
     return '網路連線問題，請確認網路後重試';
   if (m.includes('rate limit') || m.includes('429') || m.includes('too many'))
-    return '模型使用頻率過高，請等待 30 秒後再試';
+    return '免費模型今日額度已用完。請稍後再試，或到右上角設定切換至「指定模型」並輸入 deepseek/deepseek-chat 使用儲值額度。';
   if (m.includes('401') || m.includes('unauthorized') || m.includes('invalid api key'))
     return 'API Key 無效，請到右上角設定重新確認';
   if (m.includes('402') || m.includes('credit') || m.includes('billing') || m.includes('insufficient'))
