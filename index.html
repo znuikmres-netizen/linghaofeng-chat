@@ -2341,22 +2341,20 @@ async function callAI(systemPrompt, userMessage) {
   } catch (err) {
     if (config.provider === 'openrouter') {
       const em = err.message.toLowerCase();
-      const isServiceDown = err.message.includes('全部失敗') ||
-                            em.includes('no endpoints') ||
-                            em.includes('context_length') ||
-                            em.includes('too large') ||
-                            em.includes('maximum context') ||
-                            isBalanceErr(err.message);
-      if (isServiceDown) {
-        // 累計失敗次數（僅用於通知，不再用於跳過 OR）
-        const orFailCount = parseInt(sessionStorage.getItem('or_fail_count') || '0');
-        sessionStorage.setItem('or_fail_count', (orFailCount + 1).toString());
-        // 只在首次通知，避免每則訊息都跳出警告
-        if (!sessionStorage.getItem('or_fallback_shown')) {
-          showError('⚠ OpenRouter 暫時無法使用，已自動切換至 Pollinations 繼續服務。');
-          sessionStorage.setItem('or_fallback_shown', '1');
+      // 金鑰錯誤直接顯示，其他所有錯誤（限速、服務異常等）立即切換 Pollinations
+      const isAuthError = em.includes('需要設定') || em.includes('401') ||
+                          em.includes('unauthorized') || em.includes('invalid api key');
+      if (!isAuthError) {
+        try {
+          if (!sessionStorage.getItem('or_fallback_shown')) {
+            showError('⚠ OpenRouter 模型受限，已切換 Pollinations 繼續服務。');
+            sessionStorage.setItem('or_fallback_shown', '1');
+          }
+          return await callPollinations(fullPrompt, userMessage);
+        } catch (polErr) {
+          // Pollinations 也失敗時拋出 Pollinations 的錯誤（有更清楚的訊息）
+          throw polErr;
         }
-        return await callPollinations(fullPrompt, userMessage);
       }
     }
     throw err;
@@ -2738,28 +2736,6 @@ async function sendMessage(rawText) {
     renderMessages();
     scrollToBottom();
 
-    const isRateLimit = /rate.limit|429|too.many.request|頻率過高/i.test(err.message || '');
-    if (isRateLimit) {
-      // 自動倒數 30 秒後重試，不需要使用者手動操作
-      setLoading(false);
-      let secs = 30;
-      const tick = () => {
-        if (errorEl._hideTimer) { clearTimeout(errorEl._hideTimer); errorEl._hideTimer = null; }
-        errorEl.textContent = `模型使用頻率過高，${secs} 秒後自動重試…`;
-        errorEl.classList.add('show');
-        if (secs <= 0) {
-          errorEl.classList.remove('show');
-          sendMessage(rawText);
-        } else {
-          secs--;
-          errorEl._hideTimer = setTimeout(tick, 1000);
-        }
-      };
-      tick();
-      return;
-    }
-
-    // 非限速錯誤：顯示錯誤並讓使用者重送
     showError(friendlyError(err.message));
     inputEl.value = rawText;
     inputEl.style.height = 'auto';
