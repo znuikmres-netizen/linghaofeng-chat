@@ -1836,8 +1836,14 @@ const FALLBACK_MODELS = [
   'z-ai/glm-4.5-air:free',                // 中文・快
   'thudm/glm-z1-32b:free',                // 推理・中文
   'stepfun/step-3.5-flash:free',           // 中文・快
+  'deepseek/deepseek-r1:free',             // DeepSeek R1 免費版
+  'meta-llama/llama-4-maverick:free',      // Llama 4 大模型
+  'meta-llama/llama-4-scout:free',         // Llama 4 快速版
+  'meta-llama/llama-3.3-70b-instruct:free',// Llama 3.3 穩定
+  'nvidia/llama-3.1-nemotron-ultra-253b-v1:free', // NVIDIA 超大
+  'google/gemini-2.0-flash-exp:free',      // Gemini Flash
   'google/gemini-flash-1.5:free',          // 穩定兜底
-  'google/gemini-2.0-flash-exp:free',      // 兜底
+  'microsoft/phi-4-reasoning-plus:free',   // 最後備援
 ];
 // 有儲值時優先用付費版（無頻率限制，消耗 OpenRouter 餘額）
 const PAID_MODELS = [
@@ -1968,16 +1974,21 @@ async function callOpenRouter(systemPrompt, userMessage) {
   // ── 使用者指定模型 ──
   if (!isAuto) {
     const primary = config.openrouterModel;
+    let creditErr = false;
     try { return await tryOpenRouterModel(primary, msgs, maxTok); }
     catch (e) {
       tried.push(`${primary.split('/')[1]}: ${e.message}`);
-      // 若限速，等 5 秒後用精簡歷史再試一次
-      const isRateErr = /429|rate.limit|too.many/i.test(e.message);
-      await new Promise(r => setTimeout(r, isRateErr ? 5000 : 500));
+      if (/can only afford/i.test(e.message)) {
+        creditErr = true; // 餘額不足，跳過重試直接用免費備援
+      } else {
+        const isRateErr = /429|rate.limit|too.many/i.test(e.message);
+        await new Promise(r => setTimeout(r, isRateErr ? 5000 : 500));
+        try { return await tryOpenRouterModel(primary, shortMsgs, maxTok); }
+        catch (e2) { tried.push(`${primary.split('/')[1]} 短: ${e2.message}`); }
+      }
     }
-    try { return await tryOpenRouterModel(primary, shortMsgs, maxTok); }
-    catch (e) { tried.push(`${primary.split('/')[1]} 短: ${e.message}`); }
     if (!config.autoFallback) throw new Error('全部失敗：\n' + tried.join('\n'));
+    if (creditErr) PAID_MODELS.forEach(m => markRL(m)); // 標記所有付費模型，強制跳免費備援
   }
 
   // ── 自動模式：付費優先（有 key）或免費模型（無 key）──
@@ -1990,11 +2001,14 @@ async function callOpenRouter(systemPrompt, userMessage) {
     if (lastGood && paid.includes(lastGood))
       paid = [lastGood, ...paid.filter(m => m !== lastGood)];
     primary = paid.filter(m => !isRL(m));
-    if (primary.length === 0) {
-      PAID_MODELS.forEach(m => sessionStorage.removeItem('rl_' + m));
-      primary = [...PAID_MODELS];
-    }
     secondary = FALLBACK_MODELS.filter(m => !isRL(m));
+    if (primary.length === 0 && secondary.length === 0) {
+      // 全部耗盡才重置，付費模型 RL 時優先跳免費備援
+      PAID_MODELS.forEach(m => sessionStorage.removeItem('rl_' + m));
+      FALLBACK_MODELS.forEach(m => sessionStorage.removeItem('rl_' + m));
+      primary = [...PAID_MODELS];
+      secondary = [...FALLBACK_MODELS];
+    }
   } else {
     // 無 key：純免費模型
     const startIdx = lastGood ? Math.max(0, FALLBACK_MODELS.indexOf(lastGood)) : 0;
@@ -2030,7 +2044,7 @@ async function callOpenRouter(systemPrompt, userMessage) {
   } catch (raceErr) {
     if (raceErr?.errors) {
       const timeouts = raceErr.errors.filter(e => /逾時/.test(e?.message || '')).length;
-      allTimedOut = timeouts >= raceList.length;
+      allTimedOut = raceList.length > 0 && timeouts >= raceList.length;
       raceList.forEach((m, i) => tried.push(`${m.split('/')[1]}: ${raceErr.errors[i]?.message || '?'}`));
     }
   }
@@ -2054,7 +2068,7 @@ async function callOpenRouter(systemPrompt, userMessage) {
   }
 
   // ── 第四輪：免費備援（只在有 key 付費全失敗後使用）──
-  for (const m of secondary.slice(0, 5)) {
+  for (const m of secondary.slice(0, 10)) {
     try {
       const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, AUTO_SEQ_TIMEOUT);
       showWinner(m, '（免費備援）'); return reply;
