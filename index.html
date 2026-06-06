@@ -1840,10 +1840,10 @@ const FALLBACK_MODELS = [
   'google/gemini-2.0-flash-exp:free',      // 兜底
 ];
 // 有儲值時優先用付費版（無頻率限制，消耗 OpenRouter 餘額）
-// 只放確定在 OpenRouter 有付費版的模型
 const PAID_MODELS = [
-  'deepseek/deepseek-chat',        // ✓ DeepSeek V3 付費版
-  'openai/gpt-4o-mini',            // ✓ GPT-4o mini 付費版
+  'deepseek/deepseek-chat',        // ✓ DeepSeek V3 付費版・中文頂尖
+  'qwen/qwen3-235b-a22b',          // ✓ Qwen3 235B 付費版・頂級中文
+  'openai/gpt-4o-mini',            // ✓ GPT-4o mini・穩定兜底
 ];
 
 const REQUEST_TIMEOUT = 40000;   // 40 秒（給大模型足夠時間）
@@ -1960,150 +1960,106 @@ async function callOpenRouter(systemPrompt, userMessage) {
 
   const quick = isQuickCommand(userMessage);
   const maxTok = quick ? MAX_TOKENS_FAST : MAX_TOKENS;
+  const msgs = buildAPIMessages(systemPrompt, HISTORY_TRIM);
+  const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
   const tried = [];
   const isAuto = config.openrouterModel === 'auto';
 
+  // ── 使用者指定模型 ──
   if (!isAuto) {
-    // 使用者指定模型：先完整歷史，失敗再截短
     const primary = config.openrouterModel;
-    try {
-      return await tryOpenRouterModel(primary, buildAPIMessages(systemPrompt, HISTORY_TRIM), maxTok);
-    } catch (e) { tried.push(`${primary.split('/')[1]}: ${e.message}`); }
-
-    try {
-      return await tryOpenRouterModel(primary, buildAPIMessages(systemPrompt, HISTORY_MIN), maxTok);
-    } catch (e) { tried.push(`${primary.split('/')[1]} 短: ${e.message}`); }
+    try { return await tryOpenRouterModel(primary, msgs, maxTok); }
+    catch (e) { tried.push(`${primary.split('/')[1]}: ${e.message}`); }
+    try { return await tryOpenRouterModel(primary, shortMsgs, maxTok); }
+    catch (e) { tried.push(`${primary.split('/')[1]} 短: ${e.message}`); }
+    if (!config.autoFallback) throw new Error('全部失敗：\n' + tried.join('\n'));
   }
 
-  // 自動模式 OR 指定模型全失敗後降級
-  if (isAuto || config.autoFallback) {
-    const lastGood = sessionStorage.getItem('auto_best_model');
-    // 有 key 時：付費版模型（無頻率限制）優先，免費版作備援
-    let ordered;
-    if (config.openrouterKey) {
-      const freeFallbacks = FALLBACK_MODELS.filter(
-        m => !PAID_MODELS.some(p => m.startsWith(p + ':') || m === p)
-      );
-      ordered = [...PAID_MODELS, ...freeFallbacks];
-      // 如果上次成功的模型已知，把它提到最前面
-      if (lastGood && ordered.includes(lastGood)) {
-        ordered = [lastGood, ...ordered.filter(m => m !== lastGood)];
-      }
-    } else {
-      const startIdx = lastGood ? Math.max(0, FALLBACK_MODELS.indexOf(lastGood)) : 0;
-      ordered = startIdx > 0
-        ? [...FALLBACK_MODELS.slice(startIdx), ...FALLBACK_MODELS.slice(0, startIdx)]
-        : [...FALLBACK_MODELS];
+  // ── 自動模式：付費優先（有 key）或免費模型（無 key）──
+  const lastGood = sessionStorage.getItem('auto_best_model');
+  let primary, secondary;
+
+  if (config.openrouterKey) {
+    // 有儲值：付費模型為主，免費為備援
+    let paid = [...PAID_MODELS];
+    if (lastGood && paid.includes(lastGood))
+      paid = [lastGood, ...paid.filter(m => m !== lastGood)];
+    primary = paid.filter(m => !isRL(m));
+    if (primary.length === 0) {
+      PAID_MODELS.forEach(m => sessionStorage.removeItem('rl_' + m));
+      primary = [...PAID_MODELS];
     }
-    // 過濾掉目前被限速的模型；若全部被限速則清除紀錄重新來過
-    const allModels = config.openrouterKey ? [...PAID_MODELS, ...FALLBACK_MODELS] : FALLBACK_MODELS;
-    const available = ordered.filter(m => !isRL(m));
-    if (available.length >= 1) ordered = available;
-    else { allModels.forEach(m => sessionStorage.removeItem('rl_' + m)); }
-
-    const msgs = buildAPIMessages(systemPrompt, HISTORY_TRIM);
-    const shortMsgs = buildAPIMessages(systemPrompt, HISTORY_MIN);
-
-    // ── 第一輪：並行競速前 N 個模型，誰最快回誰用 ──
-    const raceList = ordered.slice(0, AUTO_RACE_COUNT);
-    let raceTimeouts = 0;
-    try {
-      const { reply, model: winner } = await Promise.any(
-        raceList.map(m =>
-          tryOpenRouterModel(m, msgs, maxTok, AUTO_RACE_TIMEOUT)
-            .then(reply => ({ reply, model: m }))
-        )
-      );
-      const prev = sessionStorage.getItem('auto_best_model');
-      sessionStorage.setItem('auto_best_model', winner);
-      sessionStorage.removeItem('or_fallback_shown');  // OR 恢復，重置通知旗標
-      sessionStorage.removeItem('or_fail_count');      // 重置失敗計數
-      if (prev !== winner) showError(`✓ 使用模型：${winner.split('/')[1].replace(':free', '')}`);
-      return reply;
-    } catch (raceErr) {
-      if (raceErr?.errors) {
-        raceList.forEach((m, i) => {
-          const msg = raceErr.errors[i]?.message || '失敗';
-          tried.push(`${m.split('/')[1]}: ${msg}`);
-          if (msg.includes('逾時')) raceTimeouts++;
-        });
-      }
-      if (lastGood && raceList.includes(lastGood)) sessionStorage.removeItem('auto_best_model');
+    secondary = FALLBACK_MODELS.filter(m => !isRL(m));
+  } else {
+    // 無 key：純免費模型
+    const startIdx = lastGood ? Math.max(0, FALLBACK_MODELS.indexOf(lastGood)) : 0;
+    let free = startIdx > 0
+      ? [...FALLBACK_MODELS.slice(startIdx), ...FALLBACK_MODELS.slice(0, startIdx)]
+      : [...FALLBACK_MODELS];
+    primary = free.filter(m => !isRL(m));
+    if (primary.length === 0) {
+      FALLBACK_MODELS.forEach(m => sessionStorage.removeItem('rl_' + m));
+      primary = [...FALLBACK_MODELS];
     }
+    secondary = [];
+  }
 
-    // ── 第二輪：順序嘗試備用模型（競速有 2+ 個逾時代表服務繁忙，直接跳過避免長時間等待）──
-    if (raceTimeouts < 2) {
-      const remaining = isAuto
-        ? ordered.slice(AUTO_RACE_COUNT, AUTO_RACE_COUNT + 5)
-        : ordered.slice(AUTO_RACE_COUNT, AUTO_RACE_COUNT + 3);
-      for (const m of remaining) {
-        if (!isAuto && m === config.openrouterModel) continue;
-        try {
-          const reply = await tryOpenRouterModel(m, msgs, maxTok, AUTO_SEQ_TIMEOUT);
-          const prev = sessionStorage.getItem('auto_best_model');
-          sessionStorage.setItem('auto_best_model', m);
-          if (prev !== m) showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}`);
-          return reply;
-        } catch (e) {
-          tried.push(`${m.split('/')[1]}: ${e.message}`);
-          if (m === lastGood) sessionStorage.removeItem('auto_best_model');
-        }
-      }
-    }
+  const showWinner = (m, suffix = '') => {
+    const prev = sessionStorage.getItem('auto_best_model');
+    sessionStorage.setItem('auto_best_model', m);
+    if (prev !== m) showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}${suffix}`);
+  };
 
-    // ── 第三輪：主力模型精簡歷史並行重試（GLM + MiniMax，放寬逾時）──
-    try {
-      const mainModels = ['z-ai/glm-4.5-air:free', 'minimax/minimax-m2.5:free'];
-      const { reply, model: winner } = await Promise.any(
-        mainModels.map(m =>
-          tryOpenRouterModel(m, shortMsgs, maxTok, REQUEST_TIMEOUT)
-            .then(reply => ({ reply, model: m }))
-        )
-      );
-      sessionStorage.setItem('auto_best_model', winner);
-      sessionStorage.removeItem('or_fail_count');
-      showError(`✓ 使用模型：${winner.split('/')[1].replace(':free', '')}（精簡模式）`);
-      return reply;
-    } catch (e3) {
-      if (e3?.errors) {
-        ['z-ai/glm-4.5-air:free', 'minimax/minimax-m2.5:free'].forEach((m, i) =>
-          tried.push(`${m.split('/')[1]} 精簡: ${e3.errors[i]?.message || '失敗'}`)
-        );
-      }
-    }
-
-    // ── 第四輪：快速嘗試西方備援模型（通常立即失敗，幾乎不影響時間）──
-    for (const m of ['meta-llama/llama-3.3-70b-instruct:free', 'mistralai/mistral-7b-instruct:free']) {
-      try {
-        const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, AUTO_SEQ_TIMEOUT);
-        sessionStorage.setItem('auto_best_model', m);
-        showError(`✓ 使用模型：${m.split('/')[1].replace(':free', '')}（備援模式）`);
-        return reply;
-      } catch (e) {
-        tried.push(`${m.split('/')[1]}: ${e.message}`);
-      }
-    }
-
-    // ── 付費備援：免費模型全部失敗，改用付費模型消耗 OpenRouter 餘額──
-    const paidModels = config.openrouterKey
-      ? ['moonshotai/kimi-k2', 'deepseek/deepseek-chat', 'qwen/qwen3-235b-a22b', 'openai/gpt-4o-mini']
-      : ['deepseek/deepseek-chat', 'openai/gpt-4o-mini'];
-    for (const m of paidModels) {
-      try {
-        const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, REQUEST_TIMEOUT);
-        sessionStorage.setItem('auto_best_model', m);
-        sessionStorage.removeItem('or_fail_count');
-        showError(`✓ 使用模型：${m.split('/')[1]}（付費備援）`);
-        return reply;
-      } catch (e) {
-        tried.push(`${m.split('/')[1]}: ${e.message}`);
-        // 若餘額不足就停止，避免繼續嘗試其他付費模型
-        if (/402|insufficient|credit|billing|balance/i.test(e.message || '')) break;
-      }
+  // ── 第一輪：競速前 2 個主力模型 ──
+  const raceList = primary.slice(0, 2);
+  let allTimedOut = false;
+  try {
+    const { reply, model: winner } = await Promise.any(
+      raceList.map(m =>
+        tryOpenRouterModel(m, msgs, maxTok, AUTO_RACE_TIMEOUT)
+          .then(reply => ({ reply, model: m }))
+      )
+    );
+    showWinner(winner);
+    return reply;
+  } catch (raceErr) {
+    if (raceErr?.errors) {
+      const timeouts = raceErr.errors.filter(e => /逾時/.test(e?.message || '')).length;
+      allTimedOut = timeouts >= raceList.length;
+      raceList.forEach((m, i) => tried.push(`${m.split('/')[1]}: ${raceErr.errors[i]?.message || '?'}`));
     }
   }
 
-  throw new Error('全部失敗：\n' + tried.slice(0, 4).join('\n'));
+  // ── 第二輪：順序嘗試剩餘主力模型（全部逾時時跳過避免等太久）──
+  if (!allTimedOut) {
+    for (const m of primary.slice(2, 6)) {
+      try {
+        const reply = await tryOpenRouterModel(m, msgs, maxTok, AUTO_SEQ_TIMEOUT);
+        showWinner(m); return reply;
+      } catch (e) { tried.push(`${m.split('/')[1]}: ${e.message}`); }
+    }
+  }
+
+  // ── 第三輪：精簡歷史重試主力模型（對話太長導致失敗的保底）──
+  for (const m of primary.slice(0, 3)) {
+    try {
+      const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, AUTO_SEQ_TIMEOUT);
+      showWinner(m, '（精簡）'); return reply;
+    } catch (e) { tried.push(`${m.split('/')[1]} 精簡: ${e.message}`); }
+  }
+
+  // ── 第四輪：免費備援（只在有 key 付費全失敗後使用）──
+  for (const m of secondary.slice(0, 5)) {
+    try {
+      const reply = await tryOpenRouterModel(m, shortMsgs, maxTok, AUTO_SEQ_TIMEOUT);
+      showWinner(m, '（免費備援）'); return reply;
+    } catch (e) {
+      tried.push(`${m.split('/')[1]}: ${e.message}`);
+      if (/402|insufficient|credit|billing|balance/i.test(e.message || '')) break;
+    }
+  }
+
+  throw new Error('全部失敗：\n' + tried.slice(0, 6).join('\n'));
 }
 
 async function callAnthropic(systemPrompt, userMessage) {
@@ -2465,18 +2421,12 @@ async function buildSummaryFromHistory(charId) {
     { role: 'user', content: `${summaryPrompt}\n\n【對話記錄】\n${historyText}` }
   ];
 
-  // 優先使用中文最佳模型
-  const chineseFirstModels = [
-    'moonshotai/kimi-k2:free',
-    'deepseek/deepseek-chat-v3.1:free',
-    'qwen/qwen3-32b:free',
-    'minimax/minimax-m2.5:free',
-    'z-ai/glm-4.5-air:free',
-    'tencent/hunyuan-a13b-instruct:free',
-    'qwen/qwen-2.5-72b-instruct:free',
-    'deepseek/deepseek-chat',
-    'openai/gpt-4o-mini',
-  ];
+  // 有 key 時付費模型優先，否則免費模型
+  const chineseFirstModels = config.openrouterKey
+    ? ['deepseek/deepseek-chat', 'qwen/qwen3-235b-a22b', 'openai/gpt-4o-mini',
+       'moonshotai/kimi-k2:free', 'deepseek/deepseek-chat-v3.1:free', 'qwen/qwen3-32b:free']
+    : ['moonshotai/kimi-k2:free', 'deepseek/deepseek-chat-v3.1:free', 'qwen/qwen3-32b:free',
+       'minimax/minimax-m2.5:free', 'z-ai/glm-4.5-air:free', 'qwen/qwen-2.5-72b-instruct:free'];
 
   if (config.provider === 'openrouter' && config.openrouterKey) {
     const baseModel = (config.openrouterModel && config.openrouterModel !== 'auto')
