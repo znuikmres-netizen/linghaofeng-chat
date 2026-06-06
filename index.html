@@ -2292,20 +2292,6 @@ async function callAI(systemPrompt, userMessage) {
       default:             return await callPollinations(fullPrompt, userMessage);
     }
   } catch (err) {
-    if (config.provider === 'openrouter') {
-      const em = err.message.toLowerCase();
-      const isBalanceErr = /402|insufficient|credit|billing|balance|余额/i.test(err.message);
-      const isServiceDown = em.includes('全部失敗') || em.includes('no endpoints') ||
-                            em.includes('context_length') || em.includes('too large') ||
-                            em.includes('maximum context') || isBalanceErr;
-      if (isServiceDown) {
-        if (!sessionStorage.getItem('or_fallback_shown')) {
-          showError('⚠ OpenRouter 暫時無法使用，已切換 Pollinations 繼續服務。');
-          sessionStorage.setItem('or_fallback_shown', '1');
-        }
-        return await callPollinations(fullPrompt, userMessage);
-      }
-    }
     throw err;
   }
 }
@@ -2332,7 +2318,7 @@ function friendlyError(msg) {
   if (m.includes('pollinations 失敗'))
     return 'Pollinations 服務暫時無法使用，請稍後再試。（OpenRouter 有額度可切換回去）';
   if (m.includes('全部失敗') || m.includes('no endpoints'))
-    return '模型服務暫時不可用，請稍後再試，或切換至 Pollinations 免費服務（右上角設定）。';
+    return 'OpenRouter 所有模型暫時無法回應，請稍後重試。（若持續出現請確認 API Key 是否正確）';
   if (m.includes('timeout') || m.includes('abort') || m.includes('逾時'))
     return '模型回應逾時（免費模型有時較慢），請稍後再試或切換較快的模型';
   if (m.includes('network') || m.includes('networkerror') || m.includes('failed to fetch') || m.includes('網路'))
