@@ -1842,8 +1842,8 @@ const FALLBACK_MODELS = [
 // 有儲值時優先用付費版（無頻率限制，消耗 OpenRouter 餘額）
 const PAID_MODELS = [
   'deepseek/deepseek-chat',        // ✓ DeepSeek V3 付費版・中文頂尖
-  'qwen/qwen3-235b-a22b',          // ✓ Qwen3 235B 付費版・頂級中文
   'openai/gpt-4o-mini',            // ✓ GPT-4o mini・穩定兜底
+  'anthropic/claude-haiku-4-5',    // ✓ Claude Haiku・快速備援
 ];
 
 const REQUEST_TIMEOUT = 40000;   // 40 秒（給大模型足夠時間）
@@ -2322,8 +2322,11 @@ function friendlyError(msg) {
   // 先比對複合錯誤（含子訊息的包裝錯誤），避免被子訊息的 HTTP 代碼誤判
   if (m.includes('pollinations 失敗'))
     return 'Pollinations 服務暫時無法使用，請稍後再試。（OpenRouter 有額度可切換回去）';
-  if (m.includes('全部失敗') || m.includes('no endpoints'))
-    return 'OpenRouter 所有模型暫時無法回應，請稍後重試。（若持續出現請確認 API Key 是否正確）';
+  if (m.includes('全部失敗') || m.includes('no endpoints')) {
+    // 提取第一條實際錯誤讓使用者看到真正原因
+    const detail = msg.split('\n').find(l => l.trim() && !l.startsWith('全部失敗')) || '';
+    return `OpenRouter 失敗：${detail || '所有模型無回應'}`;
+  }
   if (m.includes('timeout') || m.includes('abort') || m.includes('逾時'))
     return '模型回應逾時（免費模型有時較慢），請稍後再試或切換較快的模型';
   if (m.includes('network') || m.includes('networkerror') || m.includes('failed to fetch') || m.includes('網路'))
@@ -2414,7 +2417,7 @@ async function buildSummaryFromHistory(charId) {
 
   // 有 key 時付費模型優先，否則免費模型
   const chineseFirstModels = config.openrouterKey
-    ? ['deepseek/deepseek-chat', 'qwen/qwen3-235b-a22b', 'openai/gpt-4o-mini',
+    ? ['deepseek/deepseek-chat', 'openai/gpt-4o-mini',
        'moonshotai/kimi-k2:free', 'deepseek/deepseek-chat-v3.1:free', 'qwen/qwen3-32b:free']
     : ['moonshotai/kimi-k2:free', 'deepseek/deepseek-chat-v3.1:free', 'qwen/qwen3-32b:free',
        'minimax/minimax-m2.5:free', 'z-ai/glm-4.5-air:free', 'qwen/qwen-2.5-72b-instruct:free'];
