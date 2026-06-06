@@ -1797,7 +1797,7 @@ function hideError() {
 }
 
 // 記錄被限速的模型（sessionStorage，3 分鐘窗口）
-const RL_WINDOW = 3 * 60 * 1000;
+const RL_WINDOW = 45 * 1000; // 45 秒後允許重試（付費模型限速週期短）
 function markRL(model) {
   try { sessionStorage.setItem('rl_' + model, Date.now()); } catch(e) {}
 }
@@ -1969,7 +1969,12 @@ async function callOpenRouter(systemPrompt, userMessage) {
   if (!isAuto) {
     const primary = config.openrouterModel;
     try { return await tryOpenRouterModel(primary, msgs, maxTok); }
-    catch (e) { tried.push(`${primary.split('/')[1]}: ${e.message}`); }
+    catch (e) {
+      tried.push(`${primary.split('/')[1]}: ${e.message}`);
+      // 若限速，等 5 秒後用精簡歷史再試一次
+      const isRateErr = /429|rate.limit|too.many/i.test(e.message);
+      await new Promise(r => setTimeout(r, isRateErr ? 5000 : 500));
+    }
     try { return await tryOpenRouterModel(primary, shortMsgs, maxTok); }
     catch (e) { tried.push(`${primary.split('/')[1]} 短: ${e.message}`); }
     if (!config.autoFallback) throw new Error('全部失敗：\n' + tried.join('\n'));
