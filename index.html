@@ -1929,22 +1929,38 @@ async function callPollinations(systemPrompt, userMessage) {
 }
 
 async function tryOpenRouterModel(model, messages, maxTokens, timeoutMs) {
-  const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + config.openrouterKey,
-      'HTTP-Referer': window.location.origin,
-      'X-Title': 'Lil Talk'
-    },
-    body: JSON.stringify({
-      model, messages,
-      max_tokens: maxTokens || MAX_TOKENS,
-      temperature: 0.92
-    })
-  }, timeoutMs || REQUEST_TIMEOUT);
+  const doFetch = async (mt) => {
+    const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + config.openrouterKey,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'Lil Talk'
+      },
+      body: JSON.stringify({
+        model, messages,
+        max_tokens: mt,
+        temperature: 0.92
+      })
+    }, timeoutMs || REQUEST_TIMEOUT);
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
+  };
 
-  const data = await response.json().catch(() => ({}));
+  let { response, data } = await doFetch(maxTokens || MAX_TOKENS);
+
+  // 若回傳「只能負擔 N tokens」，自動縮量重試一次
+  if (!response.ok && response.status === 429) {
+    const detail0 = data.error?.message || '';
+    const affordMatch = detail0.match(/can only afford (\d+)/i);
+    if (affordMatch) {
+      const affordable = parseInt(affordMatch[1]) - 10;
+      if (affordable > 40) {
+        ({ response, data } = await doFetch(affordable));
+      }
+    }
+  }
 
   if (!response.ok) {
     const detail = data.error?.message || data.error?.code || `HTTP ${response.status}`;
@@ -2337,20 +2353,23 @@ function friendlyError(msg) {
   if (m.includes('pollinations 失敗'))
     return 'Pollinations 服務暫時無法使用，請稍後再試。（OpenRouter 有額度可切換回去）';
   if (m.includes('全部失敗') || m.includes('no endpoints')) {
-    // 提取第一條實際錯誤讓使用者看到真正原因
     const detail = msg.split('\n').find(l => l.trim() && !l.startsWith('全部失敗')) || '';
+    if (/can only afford/i.test(detail))
+      return '⚠ OpenRouter 餘額耗盡。請前往 openrouter.ai/settings/credits 儲值，免費模型備援已啟動。';
     return `OpenRouter 失敗：${detail || '所有模型無回應'}`;
   }
+  if (m.includes('can only afford'))
+    return '⚠ OpenRouter 餘額耗盡，已自動切換免費模型。請前往 openrouter.ai/settings/credits 儲值。';
   if (m.includes('timeout') || m.includes('abort') || m.includes('逾時'))
     return '模型回應逾時（免費模型有時較慢），請稍後再試或切換較快的模型';
   if (m.includes('network') || m.includes('networkerror') || m.includes('failed to fetch') || m.includes('網路'))
     return '網路連線問題，請確認網路後重試';
   if (m.includes('rate limit') || m.includes('429') || m.includes('too many'))
-    return '免費模型今日額度已用完。請稍後再試，或到右上角設定切換至「指定模型」並輸入 deepseek/deepseek-chat 使用儲值額度。';
+    return '免費模型今日額度已用完，請稍後再試';
   if (m.includes('401') || m.includes('unauthorized') || m.includes('invalid api key'))
     return 'API Key 無效，請到右上角設定重新確認';
   if (m.includes('402') || m.includes('credit') || m.includes('billing') || m.includes('insufficient'))
-    return '⚠ OpenRouter 餘額不足。已自動切換 Pollinations 免費服務，或請至 openrouter.ai 儲值（最低 $5）。';
+    return '⚠ OpenRouter 餘額不足，請至 openrouter.ai/settings/credits 儲值。';
   if (m.includes('503') || m.includes('overload') || m.includes('unavailable'))
     return '模型目前過載，請稍後再試或切換其他模型';
   if (m.includes('空回應') || m.includes('empty'))
