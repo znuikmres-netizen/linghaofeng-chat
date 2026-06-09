@@ -457,6 +457,7 @@
     max-width: 85%;
     min-width: 0;
   }
+  .message.bot.editing .message-row { max-width: 96%; }
   .message.user .message-row { flex-direction: row-reverse; }
 
   .message-avatar {
@@ -2731,6 +2732,7 @@ function startEditMessage(index) {
 
   const wrapper = messagesEl.querySelector(`[data-msg-index="${index}"]`);
   if (!wrapper) return;
+  wrapper.classList.add('editing');
 
   const bubble = wrapper.querySelector('.bubble');
   const original = msg.content;
