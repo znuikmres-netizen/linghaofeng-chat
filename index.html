@@ -484,6 +484,7 @@
     min-width: 0;
     font-weight: 600;          /* ← 對話預設粗體 */
     color: #111B21;            /* ← 對話黑色 */
+    position: relative;
   }
 
   .message.bot .bubble {
@@ -578,9 +579,70 @@
   }
   .action-btn:active { transform: scale(0.97); }
   .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .action-bar2 { padding-top: 0; padding-bottom: 8px; }
   .action-btn-sm { font-size: 12px; padding: 7px 10px; }
   .action-btn-danger { background: rgba(220,53,69,0.1); border-color: rgba(220,53,69,0.3); color: #dc3545; }
+
+  /* 編輯回應 */
+  .msg-edit-btn {
+    position: absolute;
+    bottom: 5px;
+    right: 8px;
+    background: rgba(0,0,0,0.06);
+    border: none;
+    border-radius: 8px;
+    padding: 2px 7px;
+    font-size: 11px;
+    cursor: pointer;
+    color: #666;
+    opacity: 0;
+    transition: opacity 0.15s;
+    line-height: 1.6;
+    font-family: inherit;
+  }
+  .message.bot:hover .msg-edit-btn { opacity: 1; }
+  @media (pointer: coarse) { .msg-edit-btn { opacity: 0.45; } }
+
+  .edit-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(0,0,0,0.03);
+    border: 1.5px solid rgba(0, 168, 132, 0.4);
+    border-radius: 12px;
+    color: #111B21;
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    line-height: 1.6;
+    padding: 8px 10px;
+    resize: vertical;
+    min-height: 72px;
+    outline: none;
+    white-space: pre-wrap;
+  }
+  .edit-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .edit-save-btn, .edit-cancel-btn {
+    flex: 1;
+    padding: 7px;
+    border-radius: 12px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 500;
+  }
+  .edit-save-btn {
+    background: rgba(0, 168, 132, 0.13);
+    border: 1px solid rgba(0, 168, 132, 0.4);
+    color: #25D366;
+  }
+  .edit-cancel-btn {
+    background: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.1);
+    color: #8696A0;
+  }
 
   /* 輸入區 */
   .input-area {
@@ -795,10 +857,7 @@
     <div class="error-msg" id="error-msg"></div>
 
     <div class="action-bar">
-      <button class="action-btn" id="advance-btn">▶ 推進劇情</button>
       <button class="action-btn" id="newplot-btn">✦ 新劇情</button>
-    </div>
-    <div class="action-bar action-bar2">
       <button class="action-btn action-btn-sm" id="regen-btn">↺ 重新生成</button>
       <button class="action-btn action-btn-sm action-btn-danger" id="delete-btn">🗑 刪除回應</button>
     </div>
@@ -1251,7 +1310,6 @@ const messagesEl = $('messages');
 const inputEl = $('input');
 inputEl.style.height = '22px';
 const sendBtn = $('send-btn');
-const advanceBtn = $('advance-btn');
 const newplotBtn = $('newplot-btn');
 const errorEl = $('error-msg');
 const settingsBtn = $('settings-btn');
@@ -1720,11 +1778,12 @@ function formatMessage(text) {
   return t;
 }
 
-function renderMessage(msg, animate = true) {
+function renderMessage(msg, animate = true, msgIndex = undefined) {
   const char = currentCharacter();
   const wrapper = document.createElement('div');
   wrapper.className = 'message ' + (msg.role === 'user' ? 'user' : 'bot');
   if (!animate) wrapper.style.animation = 'none';
+  if (msgIndex !== undefined) wrapper.dataset.msgIndex = msgIndex;
 
   const row = document.createElement('div');
   row.className = 'message-row';
@@ -1740,6 +1799,14 @@ function renderMessage(msg, animate = true) {
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.innerHTML = formatMessage(msg.content);
+
+  if (msg.role === 'assistant' && msgIndex !== undefined) {
+    const editBtn = document.createElement('button');
+    editBtn.className = 'msg-edit-btn';
+    editBtn.textContent = '✏ 編輯';
+    editBtn.addEventListener('click', e => { e.stopPropagation(); startEditMessage(msgIndex); });
+    bubble.appendChild(editBtn);
+  }
 
   row.appendChild(bubble);
   wrapper.appendChild(row);
@@ -1758,7 +1825,7 @@ function renderMessages() {
   divider.className = 'date-divider';
   divider.textContent = '— 故事開始 —';
   messagesEl.appendChild(divider);
-  state.messages.forEach(m => renderMessage(m, false));
+  state.messages.forEach((m, i) => renderMessage(m, false, i));
 }
 
 function scrollToBottom() {
@@ -1864,9 +1931,9 @@ const HISTORY_MIN = 6;            // 最短保留 6 條
 const NOTES_UPDATE_INTERVAL = 12 * 60 * 60 * 1000; // 12 小時自動更新一次
 const NOTES_MSG_THRESHOLD = 3;    // 每累積 3 則訊息自動更新一次
 const NOTES_RETRY_INTERVAL = 5 * 60 * 1000; // 失敗後 5 分鐘內不重試
-// 偵測是否為快速指令（推進/新劇情）—— 只縮短 token，不換模型
+// 偵測是否為快速指令（新劇情）—— 只縮短 token，不換模型
 function isQuickCommand(userMsg) {
-  return /請開啟新劇情|請繼續推進劇情|新劇情|推進劇情/.test(userMsg || '');
+  return /請開啟新劇情|新劇情/.test(userMsg || '');
 }
 
 // 帶 timeout 的 fetch 包裝
@@ -2337,7 +2404,6 @@ async function callAI(systemPrompt, userMessage) {
 function setLoading(on) {
   state.isLoading = on;
   sendBtn.disabled = on;
-  advanceBtn.disabled = on;
   newplotBtn.disabled = on;
   $('regen-btn').disabled = on;
   $('delete-btn').disabled = on;
@@ -2639,7 +2705,7 @@ async function regenerateLast() {
     removeTyping();
     const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
     state.messages.push(botMsg);
-    renderMessage(botMsg); scrollToBottom();
+    renderMessage(botMsg, true, state.messages.length - 1); scrollToBottom();
     saveHistoryForCharacter(char.id);
   } catch (err) {
     removeTyping();
@@ -2656,6 +2722,50 @@ function deleteLastBotMsg() {
   state.messages.pop();
   saveHistoryForCharacter(state.currentCharId);
   renderMessages(); scrollToBottom();
+}
+
+function startEditMessage(index) {
+  if (state.isLoading) return;
+  const msg = state.messages[index];
+  if (!msg || msg.role !== 'assistant') return;
+
+  const wrapper = messagesEl.querySelector(`[data-msg-index="${index}"]`);
+  if (!wrapper) return;
+
+  const bubble = wrapper.querySelector('.bubble');
+  const original = msg.content;
+  bubble.innerHTML = '';
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'edit-textarea';
+  textarea.value = original;
+  bubble.appendChild(textarea);
+
+  const actions = document.createElement('div');
+  actions.className = 'edit-actions';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'edit-save-btn';
+  saveBtn.textContent = '✓ 儲存';
+  saveBtn.onclick = () => {
+    const newText = textarea.value.trim();
+    if (!newText) return;
+    state.messages[index] = { ...msg, content: newText };
+    saveHistoryForCharacter(state.currentCharId);
+    renderMessages();
+    scrollToBottom();
+  };
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'edit-cancel-btn';
+  cancelBtn.textContent = '取消';
+  cancelBtn.onclick = () => renderMessages();
+
+  actions.appendChild(saveBtn);
+  actions.appendChild(cancelBtn);
+  bubble.appendChild(actions);
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 }
 
 // ============================================
@@ -2689,7 +2799,7 @@ async function sendMessage(rawText) {
 
     const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
     state.messages.push(botMsg);
-    renderMessage(botMsg);
+    renderMessage(botMsg, true, state.messages.length - 1);
     scrollToBottom();
     saveHistoryForCharacter(char.id);
 
@@ -2817,7 +2927,6 @@ inputEl.addEventListener('input', () => {
   inputEl.style.height = Math.min(inputEl.scrollHeight, 88) + 'px';
 });
 
-advanceBtn.addEventListener('click', () => sendMessage('請繼續推進劇情'));
 newplotBtn.addEventListener('click', () => sendMessage('請開啟新劇情'));
 resetBtn.addEventListener('click', resetConversation);
 backBtn.addEventListener('click', showHome);
