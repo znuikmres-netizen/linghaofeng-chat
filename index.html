@@ -2116,8 +2116,8 @@ const REQUEST_TIMEOUT = 40000;   // 40 秒（給大模型足夠時間）
 const AUTO_RACE_TIMEOUT = 35000; // 35 秒（並行競速，讓 Kimi/DeepSeek/Qwen 有時間輸出）
 const AUTO_SEQ_TIMEOUT  = 20000; // 20 秒（順序嘗試）
 const AUTO_RACE_COUNT = 2;       // 只競速 Kimi K2 + DeepSeek，確保品質
-const MAX_TOKENS = 300;           // 保持在 OpenRouter 免費額度上限以內
-const MAX_TOKENS_FAST = 200;      // 快速指令用
+const MAX_TOKENS = 500;           // 允許更豐富的回應（credit 不足時 tryOpenRouterModel 自動縮量）
+const MAX_TOKENS_FAST = 300;      // 快速指令用
 const HISTORY_FULL = null;        // 不限
 const HISTORY_TRIM = 30;          // 保留最近 30 條（個人使用不需省 context）
 const HISTORY_MIN = 6;            // 最短保留 6 條
@@ -2151,7 +2151,7 @@ async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT) {
 
 // 建構送給 API 的 messages：永遠保留第一條（劇情背景）+ 最近 N 條
 function buildAPIMessages(systemPrompt, limit) {
-  const richRule = '\n\n【豐富度規則・必須執行】每次回應都必須同時包含以下至少兩項：①動作或環境描寫（*斜體*）②角色台詞（**粗體**）③角色內心感受或感官細節。每項至少 10 個字，整體回應不少於 100 字，讓對話有層次、有畫面、有溫度。';
+  const richRule = '\n\n【豐富度規則・必須執行】每次回應字數不少於 150 字，且必須同時包含：①動作或環境描寫（*斜體*，至少 2 句）②角色台詞（**粗體**，至少 2-3 句，每句完整表達情感或推進劇情，不只是一個詞或一句話）③角色內心感受或感官細節（可融入動作段或獨立一段）。台詞必須有血有肉——角色要說出完整的話，帶出情緒、性格或隱藏心思，禁止用一個字或半句話敷衍收場。';
   const msgs = state.messages;
   let history;
   if (!limit || msgs.length <= limit) {
