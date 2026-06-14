@@ -2151,6 +2151,7 @@ async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT) {
 
 // 建構送給 API 的 messages：永遠保留第一條（劇情背景）+ 最近 N 條
 function buildAPIMessages(systemPrompt, limit) {
+  const richRule = '\n\n【豐富度規則・必須執行】每次回應都必須同時包含以下至少兩項：①動作或環境描寫（*斜體*）②角色台詞（**粗體**）③角色內心感受或感官細節。每項至少 10 個字，整體回應不少於 100 字，讓對話有層次、有畫面、有溫度。';
   const msgs = state.messages;
   let history;
   if (!limit || msgs.length <= limit) {
@@ -2159,7 +2160,7 @@ function buildAPIMessages(systemPrompt, limit) {
     // 保留 msgs[0] (劇情背景) + 最近 (limit-1) 條
     history = [msgs[0], ...msgs.slice(-(limit - 1))];
   }
-  return [{ role: 'system', content: systemPrompt }, ...history];
+  return [{ role: 'system', content: systemPrompt + richRule }, ...history];
 }
 
 async function callPollinations(systemPrompt, userMessage) {
