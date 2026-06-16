@@ -152,49 +152,9 @@
     z-index: 5;
   }
 
-  /* 大頭貼 2D 動態表情 */
+  /* 大頭貼放大 */
   #chat-avatar { width: 64px; height: 64px; font-size: 24px; cursor: pointer; }
   .message-avatar.avatar { width: 42px; height: 42px; }
-
-  .avatar-blink {
-    position: absolute;
-    left: 50%;
-    top: 36%;
-    width: 44%;
-    height: 8%;
-    transform: translate(-50%, -50%) scaleY(0);
-    transform-origin: center;
-    background: rgba(20, 15, 15, 0.85);
-    border-radius: 50%;
-    z-index: 3;
-    pointer-events: none;
-    animation: avatarBlink 6s infinite;
-  }
-  @keyframes avatarBlink {
-    0%, 94%, 100% { transform: translate(-50%, -50%) scaleY(0); opacity: 0; }
-    96%, 98% { transform: translate(-50%, -50%) scaleY(1); opacity: 0.9; }
-  }
-  .avatar-blush {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    z-index: 2;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.5s;
-    background:
-      radial-gradient(circle at 28% 64%, rgba(255, 90, 120, 0.55) 0%, transparent 50%),
-      radial-gradient(circle at 72% 64%, rgba(255, 90, 120, 0.55) 0%, transparent 50%);
-  }
-  .avatar.mood-shy .avatar-blush { opacity: 1; }
-  .avatar.mood-angry .avatar-img { filter: contrast(1.18) saturate(1.25) brightness(0.94); }
-  .avatar.mood-happy .avatar-img { filter: brightness(1.08) saturate(1.12); }
-  .avatar.mood-surprised .avatar-img { animation: avatarSurprise 0.5s ease; }
-  @keyframes avatarSurprise {
-    0% { transform: scale(1); }
-    35% { transform: scale(1.07); }
-    100% { transform: scale(1); }
-  }
 
   /* ====== 視圖切換 ====== */
   .view {
@@ -939,7 +899,6 @@
       </div>
       <div class="header-action" id="reset-btn" title="重置對話">⟲</div>
       <div class="header-action" id="notes-btn" title="劇情備忘錄">📋</div>
-      <div class="header-action" id="expr-btn" title="表情圖管理">🎭</div>
       <div class="header-action" id="settings-btn" title="設定">⚙</div>
     </div>
 
@@ -1040,13 +999,7 @@
     </div>
 
     <hr style="border:none;border-top:1px solid rgba(0,0,0,0.08);margin:16px 0;">
-    <label>🎭 動態表情</label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;">
-      <input type="checkbox" id="enable-expressions" style="width:auto;margin:0;accent-color:#00A884;">
-      <span>啟用大頭貼表情切換（需先在角色頁生成表情圖，使用 OpenRouter 圖片模型）</span>
-    </label>
-
-    <label style="margin-top:14px;">📷 自拍 / 劇情照片</label>
+    <label>📷 自拍 / 劇情照片</label>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;">
       <input type="checkbox" id="enable-photos" style="width:auto;margin:0;accent-color:#00A884;">
       <span>允許角色在合適時機傳照片（使用 OpenRouter 圖片模型，每張會消耗額度）</span>
@@ -1065,20 +1018,6 @@
       </label>
     </div>
     <small>匯出為 JSON 檔案，可在換裝置或清除記憶體後還原。</small>
-  </div>
-</div>
-
-<!-- 表情圖管理 Modal -->
-<div class="modal-overlay" id="expr-modal">
-  <div class="modal">
-    <h2>🎭 表情圖管理</h2>
-    <p style="font-size:12px;color:#667781;margin-bottom:10px;">為目前角色生成 4 種額外表情（開心／臉紅／生氣／驚訝），AI 回覆時會依情緒自動切換。需先在設定填入 OpenRouter API Key，每張圖片會消耗額度。</p>
-    <div id="expr-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;"></div>
-    <p id="expr-status" style="font-size:12px;color:#667781;min-height:16px;"></p>
-    <div class="modal-buttons">
-      <button class="btn-secondary" id="expr-close">關閉</button>
-      <button class="btn-primary" id="expr-gen-all">✨ 一次生成全部</button>
-    </div>
   </div>
 </div>
 
@@ -1546,13 +1485,10 @@ let config = {
   openrouterModel: localStorage.getItem('openrouter_model') || 'auto',
   autoFallback: localStorage.getItem('auto_fallback') !== '0',
   anthropicKey: localStorage.getItem('anthropic_key') || '',
-  enableExpressions: localStorage.getItem('enable_expressions') === '1',
   enablePhotos: localStorage.getItem('enable_photos') === '1'
 };
 
 const IMAGE_GEN_MODEL = 'google/gemini-2.5-flash-image';
-const EXPRESSIONS = ['happy', 'shy', 'angry', 'surprised'];
-const EXPRESSION_LABEL = { happy: '開心', shy: '臉紅', angry: '生氣', surprised: '驚訝' };
 
 // ============================================
 // DOM
@@ -1580,17 +1516,10 @@ const openrouterKeyInput = $('openrouter-key');
 const openrouterModelSelect = $('openrouter-model');
 const autoFallbackInput = $('auto-fallback');
 const anthropicKeyInput = $('anthropic-key');
-const enableExpressionsInput = $('enable-expressions');
 const enablePhotosInput = $('enable-photos');
 const chatAvatar = $('chat-avatar');
 const chatName = $('chat-name');
 const chatStatus = $('chat-status');
-const exprBtn = $('expr-btn');
-const exprModal = $('expr-modal');
-const exprGrid = $('expr-grid');
-const exprStatus = $('expr-status');
-const exprCloseBtn = $('expr-close');
-const exprGenAllBtn = $('expr-gen-all');
 
 // ============================================
 // 取得目前角色
@@ -1620,25 +1549,7 @@ function avatarHTML(char) {
   const onerror = fallback
     ? `if(this.dataset.fb)return;this.dataset.fb=1;this.src='${fallback}'`
     : `this.style.display='none'`;
-  return `<img class="avatar-img" src="${local}" alt="${char.name}" onload="this.classList.add('loaded')" onerror="${onerror}"><span class="avatar-letter">${char.avatarLetter}</span><div class="avatar-blink"></div><div class="avatar-blush"></div>`;
-}
-
-// ============================================
-// 大頭貼表情圖（AI 生成，依情緒切換）
-// ============================================
-function exprKey(charId, mood) { return `expr_${charId}_${mood}`; }
-
-function getExpressionImage(charId, mood) {
-  try { return localStorage.getItem(exprKey(charId, mood)) || null; } catch (e) { return null; }
-}
-
-function setExpressionImage(charId, mood, dataUrl) {
-  try { localStorage.setItem(exprKey(charId, mood), dataUrl); return true; }
-  catch (e) { return false; }
-}
-
-function clearExpressionImage(charId, mood) {
-  try { localStorage.removeItem(exprKey(charId, mood)); } catch (e) {}
+  return `<img class="avatar-img" src="${local}" alt="${char.name}" onload="this.classList.add('loaded')" onerror="${onerror}"><span class="avatar-letter">${char.avatarLetter}</span>`;
 }
 
 const avatarBase64Cache = new Map();
@@ -1655,62 +1566,6 @@ async function localAvatarAsDataUrl(char) {
   });
   avatarBase64Cache.set(char.id, dataUrl);
   return dataUrl;
-}
-
-async function generateExpressionImage(char, mood) {
-  if (!config.openrouterKey) throw new Error('需要先在設定填入 OpenRouter API Key');
-  const moodPromptMap = {
-    happy: '開心微笑，眼神溫柔上揚的表情',
-    shy: '臉頰泛紅、害羞低頭偏移視線的表情',
-    angry: '生氣皺眉、不悅瞪視的表情',
-    surprised: '驚訝睜大眼睛、微張嘴的表情'
-  };
-  const refDataUrl = await localAvatarAsDataUrl(char);
-  const prompt = `這是同一個角色的頭像參考圖。請保持完全相同的臉部特徵、髮型、服裝與畫風，只改變表情為：${moodPromptMap[mood]}。${char.avatarPrompt || ''} 輸出正方形大頭貼構圖。`;
-  const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + config.openrouterKey,
-      'HTTP-Referer': window.location.origin,
-      'X-Title': 'Lil Talk'
-    },
-    body: JSON.stringify({
-      model: IMAGE_GEN_MODEL,
-      modalities: ['image', 'text'],
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: refDataUrl } }
-        ]
-      }]
-    })
-  }, 45000);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error?.message || `圖片生成失敗 HTTP ${res.status}`);
-  const img = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-  if (!img) throw new Error('圖片生成失敗：模型未回傳圖片');
-  setExpressionImage(char.id, mood, img);
-  return img;
-}
-
-function applyMoodToAvatar(containerEl, char, mood) {
-  if (!containerEl) return;
-  EXPRESSIONS.forEach(m => containerEl.classList.remove('mood-' + m));
-  const img = containerEl.querySelector('.avatar-img');
-  if (!img) return;
-  if (mood && EXPRESSIONS.includes(mood) && config.enableExpressions) {
-    const cached = getExpressionImage(char.id, mood);
-    if (cached) {
-      containerEl.classList.add('mood-' + mood);
-      img.classList.remove('loaded');
-      img.src = cached;
-      img.onload = () => img.classList.add('loaded');
-      return;
-    }
-  }
-  img.src = characterAvatarUrl(char);
 }
 
 // ============================================
@@ -2233,8 +2088,6 @@ function renderMessage(msg, animate = true, msgIndex = undefined) {
     av.style.background = char.avatarGradient;
     av.innerHTML = avatarHTML(char);
     row.appendChild(av);
-    applyMoodToAvatar(av, char, msg.mood);
-    if (msg.mood && EXPRESSIONS.includes(msg.mood)) applyMoodToAvatar(chatAvatar, char, msg.mood);
   }
 
   const bubble = document.createElement('div');
@@ -2411,13 +2264,11 @@ async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT) {
 }
 
 // 建構送給 API 的 messages：永遠保留第一條（劇情背景）+ 最近 N 條
-const MOOD_RULE = '\n\n【表情標記・內部使用】在回應的最開頭加上情緒標記，格式固定為 [mood:xxx]，xxx 必須是 neutral、happy、shy、angry、surprised 其中一個，依角色當下最貼切的情緒選擇。這個標記只給系統判讀，不會顯示給玩家，禁止省略。';
 const PHOTO_RULE = '\n\n【傳照片・內部使用】只有在玩家明確要求看照片/自拍，或劇情非常自然會這麼做時（例如玩家問「在幹嘛」「傳張照片看看」），才在回應的最後加上 [photo: 簡短情境描述] 標記（例如 [photo: 剛洗完澡，頭髮濕濕的]），用來生成一張符合情境的照片。不要每次都加，只有真正合理時才使用，這個標記不會顯示給玩家看。';
 
 function buildAPIMessages(systemPrompt, limit) {
   const richRule = '\n\n【台詞規則・最高優先】角色說出口的話（**粗體**）是回應的核心。每次必須說至少 3-4 句完整台詞，每句台詞至少 10 個字，要有情緒、有性格、有話中話——可以是反問、試探、發洩、帶刺的關心、欲言又止。動作描寫（*斜體*）點到為止，不超過 2 句，只用來烘托台詞的氛圍。禁止用沉默、省略號或一兩個字代替台詞。';
   let metaRule = '';
-  if (config.enableExpressions) metaRule += MOOD_RULE;
   if (config.enablePhotos) metaRule += PHOTO_RULE;
   const msgs = state.messages;
   let history;
@@ -2430,18 +2281,14 @@ function buildAPIMessages(systemPrompt, limit) {
   return [{ role: 'system', content: systemPrompt + richRule + metaRule }, ...history];
 }
 
-// 從 AI 回覆中抽出 [mood:xxx] 與 [photo:...] 標記，回傳清理後文字與資料
+// 從 AI 回覆中抽出 [photo:...] 標記，回傳清理後文字與資料
 function extractMeta(text) {
   let t = text || '';
-  let mood = null;
   let photoPrompt = null;
-  const moodMatch = t.match(/\[mood:\s*(neutral|happy|shy|angry|surprised)\s*\]/i);
-  if (moodMatch) mood = moodMatch[1].toLowerCase();
-  t = t.replace(/\[mood:\s*\w+\s*\]/gi, '');
   const photoMatch = t.match(/\[photo:\s*([^\]]{2,200})\]/i);
   if (photoMatch) photoPrompt = photoMatch[1].trim();
   t = t.replace(/\[photo:\s*[^\]]*\]/gi, '');
-  return { text: t.trim(), mood, photoPrompt };
+  return { text: t.trim(), photoPrompt };
 }
 
 async function callPollinations(systemPrompt, userMessage) {
@@ -3179,7 +3026,7 @@ async function regenerateLast() {
     const meta = extractMeta(rawReply);
     const reply = fixResponseFormat(toTraditional(meta.text));
     removeTyping();
-    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), mood: meta.mood, photoPrompt: meta.photoPrompt };
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), photoPrompt: meta.photoPrompt };
     state.messages.push(botMsg);
     const idx = state.messages.length - 1;
     renderMessage(botMsg, true, idx); scrollToBottom();
@@ -3276,7 +3123,7 @@ async function sendMessage(rawText) {
     const reply = fixResponseFormat(toTraditional(meta.text));
     removeTyping();
 
-    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), mood: meta.mood, photoPrompt: meta.photoPrompt };
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), photoPrompt: meta.photoPrompt };
     state.messages.push(botMsg);
     const idx = state.messages.length - 1;
     renderMessage(botMsg, true, idx);
@@ -3357,80 +3204,12 @@ function updateProviderUI() {
   }
 }
 
-// ============================================
-// 表情圖管理 Modal
-// ============================================
-function openExprModal() {
-  const char = currentCharacter();
-  if (!char) return;
-  renderExprGrid(char);
-  exprStatus.textContent = '';
-  exprModal.classList.add('show');
-}
-
-function renderExprGrid(char) {
-  exprGrid.innerHTML = '';
-  EXPRESSIONS.forEach(mood => {
-    const cell = document.createElement('div');
-    cell.style.cssText = 'border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:8px;text-align:center;';
-    const cached = getExpressionImage(char.id, mood);
-    const thumb = document.createElement('div');
-    thumb.style.cssText = 'width:100%;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#F0F2F5;margin-bottom:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#999;';
-    thumb.innerHTML = cached ? `<img src="${cached}" style="width:100%;height:100%;object-fit:cover;">` : '尚未生成';
-    const label = document.createElement('div');
-    label.style.cssText = 'font-size:12px;margin-bottom:6px;';
-    label.textContent = EXPRESSION_LABEL[mood];
-    const btn = document.createElement('button');
-    btn.className = 'btn-secondary';
-    btn.style.cssText = 'width:100%;padding:6px;font-size:12px;';
-    btn.textContent = cached ? '↺ 重新生成' : '✨ 生成';
-    btn.onclick = () => generateOneExpression(char, mood, cell, btn);
-    cell.appendChild(thumb);
-    cell.appendChild(label);
-    cell.appendChild(btn);
-    exprGrid.appendChild(cell);
-  });
-}
-
-async function generateOneExpression(char, mood, cell, btn) {
-  btn.disabled = true;
-  btn.textContent = '生成中…';
-  exprStatus.textContent = `正在生成「${EXPRESSION_LABEL[mood]}」表情…`;
-  try {
-    await generateExpressionImage(char, mood);
-    renderExprGrid(char);
-    exprStatus.textContent = `「${EXPRESSION_LABEL[mood]}」生成完成`;
-  } catch (err) {
-    exprStatus.textContent = `失敗：${err.message}`;
-    btn.disabled = false;
-    btn.textContent = '✨ 生成';
-  }
-}
-
-async function generateAllExpressions() {
-  const char = currentCharacter();
-  if (!char) return;
-  exprGenAllBtn.disabled = true;
-  for (const mood of EXPRESSIONS) {
-    exprStatus.textContent = `正在生成「${EXPRESSION_LABEL[mood]}」表情…（${EXPRESSIONS.indexOf(mood) + 1}/${EXPRESSIONS.length}）`;
-    try {
-      await generateExpressionImage(char, mood);
-      renderExprGrid(char);
-    } catch (err) {
-      exprStatus.textContent = `「${EXPRESSION_LABEL[mood]}」失敗：${err.message}`;
-    }
-  }
-  exprStatus.textContent = '全部完成';
-  exprGenAllBtn.disabled = false;
-}
-
 function openSettings() {
   providerSelect.value = config.provider;
   openrouterKeyInput.value = config.openrouterKey;
   openrouterModelSelect.value = config.openrouterModel;
   autoFallbackInput.checked = config.autoFallback;
   anthropicKeyInput.value = config.anthropicKey;
-  enableExpressionsInput.checked = config.enableExpressions;
   enablePhotosInput.checked = config.enablePhotos;
   updateProviderUI();
   settingsModal.classList.add('show');
@@ -3442,7 +3221,6 @@ function saveSettings() {
   config.openrouterModel = openrouterModelSelect.value;
   config.autoFallback = autoFallbackInput.checked;
   config.anthropicKey = anthropicKeyInput.value.trim();
-  config.enableExpressions = enableExpressionsInput.checked;
   config.enablePhotos = enablePhotosInput.checked;
 
   localStorage.setItem('provider', config.provider);
@@ -3450,7 +3228,6 @@ function saveSettings() {
   localStorage.setItem('openrouter_model', config.openrouterModel);
   localStorage.setItem('auto_fallback', config.autoFallback ? '1' : '0');
   localStorage.setItem('anthropic_key', config.anthropicKey);
-  localStorage.setItem('enable_expressions', config.enableExpressions ? '1' : '0');
   localStorage.setItem('enable_photos', config.enablePhotos ? '1' : '0');
 
   updateStatus();
@@ -3490,12 +3267,6 @@ $('modal-save').addEventListener('click', saveSettings);
 providerSelect.addEventListener('change', updateProviderUI);
 settingsModal.addEventListener('click', (e) => {
   if (e.target === settingsModal) settingsModal.classList.remove('show');
-});
-exprBtn.addEventListener('click', openExprModal);
-exprCloseBtn.addEventListener('click', () => exprModal.classList.remove('show'));
-exprGenAllBtn.addEventListener('click', () => generateAllExpressions());
-exprModal.addEventListener('click', (e) => {
-  if (e.target === exprModal) exprModal.classList.remove('show');
 });
 $('regen-btn').addEventListener('click', regenerateLast);
 $('delete-btn').addEventListener('click', deleteLastBotMsg);
