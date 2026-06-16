@@ -152,6 +152,55 @@
     z-index: 5;
   }
 
+  /* 大頭貼 2D 動態表情 */
+  #chat-avatar { width: 64px; height: 64px; font-size: 24px; cursor: pointer; }
+  .message-avatar.avatar { width: 42px; height: 42px; }
+
+  .avatar-blink {
+    position: absolute;
+    left: 50%;
+    top: 36%;
+    width: 44%;
+    height: 8%;
+    transform: translate(-50%, -50%) scaleY(0);
+    transform-origin: center;
+    background: rgba(20, 15, 15, 0.85);
+    border-radius: 50%;
+    z-index: 3;
+    pointer-events: none;
+    animation: avatarBlink 6s infinite;
+  }
+  @keyframes avatarBlink {
+    0%, 94%, 100% { transform: translate(-50%, -50%) scaleY(0); opacity: 0; }
+    96%, 98% { transform: translate(-50%, -50%) scaleY(1); opacity: 0.9; }
+  }
+  .avatar-blush {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s;
+    background:
+      radial-gradient(circle at 28% 64%, rgba(255, 90, 120, 0.55) 0%, transparent 50%),
+      radial-gradient(circle at 72% 64%, rgba(255, 90, 120, 0.55) 0%, transparent 50%);
+  }
+  .avatar.mood-shy .avatar-blush { opacity: 1; }
+  .avatar.mood-angry .avatar-img { filter: contrast(1.18) saturate(1.25) brightness(0.94); }
+  .avatar.mood-happy .avatar-img { filter: brightness(1.08) saturate(1.12); }
+  .avatar.mood-surprised .avatar-img { animation: avatarSurprise 0.5s ease; }
+  @keyframes avatarSurprise {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.07); }
+    100% { transform: scale(1); }
+  }
+  .avatar.talking .avatar-img { animation: avatarTalk 0.45s ease-in-out infinite; }
+  @keyframes avatarTalk {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.025); }
+  }
+
   /* ====== 視圖切換 ====== */
   .view {
     display: none;
@@ -609,6 +658,65 @@
   .message.bot:hover .msg-edit-btn { opacity: 1; }
   @media (pointer: coarse) { .msg-edit-btn { opacity: 0.45; } }
 
+  /* 語音播放 */
+  .msg-tts-btn {
+    position: absolute;
+    bottom: 5px;
+    left: 8px;
+    background: rgba(0,0,0,0.06);
+    border: none;
+    border-radius: 8px;
+    padding: 2px 7px;
+    font-size: 11px;
+    cursor: pointer;
+    color: #666;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+    line-height: 1.6;
+    font-family: inherit;
+  }
+  .message.bot:hover .msg-tts-btn { opacity: 1; }
+  @media (pointer: coarse) { .msg-tts-btn { opacity: 0.45; } }
+  .msg-tts-btn.playing { opacity: 1; color: #00A884; }
+
+  /* 自拍/劇情照片 */
+  .photo-bubble {
+    margin-top: 6px;
+    max-width: 220px;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .photo-bubble img { width: 100%; display: block; border-radius: 14px; }
+  .photo-bubble.loading {
+    padding: 14px 16px;
+    font-size: 13px;
+    color: #667781;
+    background: rgba(0,0,0,0.04);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .photo-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(0,168,132,0.25);
+    border-top-color: #00A884;
+    animation: photoSpin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  .photo-retry-btn {
+    border: none;
+    background: rgba(0,168,132,0.12);
+    color: #00A884;
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .photo-retry-btn:hover { background: rgba(0,168,132,0.2); }
+  @keyframes photoSpin { to { transform: rotate(360deg); } }
+
   .edit-textarea {
     width: 100%;
     box-sizing: border-box;
@@ -857,6 +965,7 @@
       </div>
       <div class="header-action" id="reset-btn" title="重置對話">⟲</div>
       <div class="header-action" id="notes-btn" title="劇情備忘錄">📋</div>
+      <div class="header-action" id="expr-btn" title="表情圖管理">🎭</div>
       <div class="header-action" id="settings-btn" title="設定">⚙</div>
     </div>
 
@@ -956,6 +1065,27 @@
       <small>從 <a href="https://console.anthropic.com/settings/keys" target="_blank">Anthropic Console</a> 取得。</small>
     </div>
 
+    <hr style="border:none;border-top:1px solid rgba(0,0,0,0.08);margin:16px 0;">
+    <label>🎭 動態表情</label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;">
+      <input type="checkbox" id="enable-expressions" style="width:auto;margin:0;accent-color:#00A884;">
+      <span>啟用大頭貼表情切換（需先在角色頁生成表情圖，使用 OpenRouter 圖片模型）</span>
+    </label>
+
+    <label style="margin-top:14px;">🔊 語音回覆（ElevenLabs）</label>
+    <input type="password" id="elevenlabs-key" placeholder="ElevenLabs API Key">
+    <small>到 <a href="https://elevenlabs.io/" target="_blank">elevenlabs.io</a> 申請，依字數計費。</small>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;margin-top:8px;">
+      <input type="checkbox" id="auto-tts" style="width:auto;margin:0;accent-color:#00A884;">
+      <span>AI 回覆後自動播放語音</span>
+    </label>
+
+    <label style="margin-top:14px;">📷 自拍 / 劇情照片</label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;">
+      <input type="checkbox" id="enable-photos" style="width:auto;margin:0;accent-color:#00A884;">
+      <span>允許角色在合適時機傳照片（使用 OpenRouter 圖片模型，每張會消耗額度）</span>
+    </label>
+
     <div class="modal-buttons">
       <button class="btn-secondary" id="modal-cancel">取消</button>
       <button class="btn-primary" id="modal-save">儲存</button>
@@ -969,6 +1099,20 @@
       </label>
     </div>
     <small>匯出為 JSON 檔案，可在換裝置或清除記憶體後還原。</small>
+  </div>
+</div>
+
+<!-- 表情圖管理 Modal -->
+<div class="modal-overlay" id="expr-modal">
+  <div class="modal">
+    <h2>🎭 表情圖管理</h2>
+    <p style="font-size:12px;color:#667781;margin-bottom:10px;">為目前角色生成 4 種額外表情（開心／臉紅／生氣／驚訝），AI 回覆時會依情緒自動切換。需先在設定填入 OpenRouter API Key，每張圖片會消耗額度。</p>
+    <div id="expr-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;"></div>
+    <p id="expr-status" style="font-size:12px;color:#667781;min-height:16px;"></p>
+    <div class="modal-buttons">
+      <button class="btn-secondary" id="expr-close">關閉</button>
+      <button class="btn-primary" id="expr-gen-all">✨ 一次生成全部</button>
+    </div>
   </div>
 </div>
 
@@ -986,6 +1130,7 @@ const CHARACTERS = [
     avatarGradient: 'linear-gradient(135deg, #7a7a8e, #1a1a26)',
     avatarPrompt: 'manhwa korean webtoon style portrait of a 27 year old asian male yakuza mafia boss, sharp messy black short hair with bangs falling over forehead, cold piercing grey eyes with lazy dangerous smirk, slight scar near eyebrow, wearing all black silk shirt with collar partially open revealing collarbone, holding silver flame lighter near jaw, dim moody dark lighting with subtle red neon accent, dangerous charming bad boy aura, semi-realistic illustration, high detail face, half body shot looking at viewer',
     avatarSeed: 88,
+    voiceId: '2EiwWnXFnvU5JabPnv8n',
     unlockDate: '2025-12-01',
     tagline: '玩世不恭的黑道大哥，從小護妳長大的「無血緣哥哥」，誰動妳他就讓誰付出代價。',
     status: '線上 · 白龍會幫主',
@@ -1029,6 +1174,7 @@ const CHARACTERS = [
     avatarGradient: 'linear-gradient(135deg, #5a87f5, #2c4ba8)',
     avatarPrompt: 'manhwa korean webtoon style portrait of a 30 year old asian male billionaire CEO, silver grey slightly wavy short hair, cold deep dark eyes, sharp jawline, perfect nose, wearing immaculate black tailored suit with loose silk tie, holding crystal whiskey glass, dim luxury office at night, aristocratic aloof cold expression, semi-realistic illustration, high detail face, half body shot, dramatic side lighting',
     avatarSeed: 71,
+    voiceId: 'VR6AewLTigWG4xSOukaG',
     unlockDate: '2025-12-01',
     tagline: '高冷禁慾的金融霸總，不近女色，唯獨對妳一再失控。',
     status: '線上 · 集團總裁',
@@ -1064,6 +1210,7 @@ const CHARACTERS = [
     avatarLetter: '白',
     avatarGradient: 'linear-gradient(135deg, #1c2f45, #2d4a6b)',
     avatarSeed: 307,
+    voiceId: 'onwK4e9ZLuTAKqWW03F9',
     unlockDate: '2025-01-01',
     tagline: '好人卡、固砲、然後他開始留意妳什麼時候回家。',
     status: '線上 · 刑警',
@@ -1156,6 +1303,7 @@ const CHARACTERS = [
     avatarGradient: 'linear-gradient(135deg, #1a1a2e, #0f0f1a)',
     avatarPrompt: 'manhwa korean webtoon style portrait of a 30 year old asian male, strikingly handsome with sharp defined features, dark slightly disheveled black hair falling loosely, heavy-lidded eyes with a languid dangerous gaze, lips slightly parted, wearing an open collar white dress shirt slightly rumpled, reclining against a dark leather chair with ornate gold trim, dim moody atmospheric lighting with deep shadows, brooding magnetic aura concealing deep longing, semi-realistic illustration, close up face and upper body',
     avatarSeed: 217,
+    voiceId: 'TxGEqnHWrfWFTfGW9XjX',
     unlockDate: '2025-01-01',
     tagline: '從小陪妳長大的青梅竹馬，十七歲就愛上妳卻選擇否認後退，四年後再度出現。',
     status: '線上 · 妳的青梅竹馬',
@@ -1204,6 +1352,7 @@ const CHARACTERS = [
     avatarGradient: 'linear-gradient(135deg, #2a1a2e, #1a0a2e)',
     avatarPrompt: 'manhwa korean webtoon style portrait of a 30 year old asian male heir to a powerful conglomerate, sharp cold handsome features, dark deep-set eyes with unreadable expression, sleek slightly swept back black hair, wearing an immaculate dark charcoal suit with a subtle sheen, no tie collar slightly open, standing with composed aristocratic stillness, commanding dangerous aura beneath a controlled surface, dim dramatic side lighting with deep shadows, semi-realistic illustration, close up face half body',
     avatarSeed: 193,
+    voiceId: 'ErXwobaYiN019PkySvjV',
     unlockDate: '2025-01-01',
     tagline: '京市第一世家的繼承人，對妳冷漠卻為妳壓著心事整整十二年。',
     status: '線上 · 邢氏集團繼承人',
@@ -1250,6 +1399,7 @@ const CHARACTERS = [
     avatarGradient: 'linear-gradient(135deg, #1a1a1a, #2c1a14)',
     avatarPrompt: 'manhwa korean webtoon style portrait of a 28 year old asian male soldier, strikingly handsome with sharp dangerous features, dark wet messy black hair swept back, cold piercing eyes with predatory gaze, multiple ear piercings including cross earring and chain, intricate dark tattoos on shoulder and neck, bare chest, dim moody lighting, dangerous magnetic aura, semi-realistic illustration, close up face and upper body',
     avatarSeed: 428,
+    voiceId: 'CYw3kZ02Hs0563khs1Fj',
     unlockDate: '2025-01-01',
     tagline: '特種部隊戰術大師，滿身刺青冷漠近殘忍，凌晨初次注意到妳。',
     status: '線上 · 深淵分隊上尉',
@@ -1311,6 +1461,7 @@ const CHARACTERS = [
     avatarGradient: 'linear-gradient(135deg, #1a1200, #0d0d00)',
     avatarPrompt: 'manhwa korean webtoon style portrait of a 32 year old asian male CEO, strikingly handsome with sharp authoritative features, dark hair slightly swept, cold calculating amber eyes, holding crystal whiskey glass, dramatic golden backlight against dark background, expensive suit, powerful composed expression hiding deep emotion, semi-realistic digital illustration, close up face',
     avatarSeed: 531,
+    voiceId: 'pNInz6obpgDQGcFmaJgB',
     unlockDate: '2025-01-01',
     tagline: '傅家少主、華爾街無冕之王，為妳破例卻渾然不覺自己已淪陷。',
     status: '線上 · 騰龍集團總裁',
@@ -1369,6 +1520,7 @@ const CHARACTERS = [
     avatarGradient: 'linear-gradient(135deg, #1a0d0d, #2a1010)',
     avatarPrompt: 'manhwa korean webtoon style portrait of a 34 year old asian male lawyer, strikingly handsome with sharp magnetic features, dark slightly wavy hair, deep brooding eyes with hidden pain, open collar dark shirt with necklace, reclining in dark leather chair, dim moody bar lighting, bottles in background, powerful yet melancholy aura, semi-realistic digital illustration, close up face and upper body',
     avatarSeed: 677,
+    voiceId: 'yoZ06aMxZJJ28mfd3POQ',
     unlockDate: '2025-01-01',
     tagline: '王牌律師，四年前選擇離開贖罪，卻不知妳懷著他的孩子獨自離去。',
     status: '線上 · 王牌律師',
@@ -1435,8 +1587,16 @@ let config = {
   openrouterKey: localStorage.getItem('openrouter_key') || '',
   openrouterModel: localStorage.getItem('openrouter_model') || 'auto',
   autoFallback: localStorage.getItem('auto_fallback') !== '0',
-  anthropicKey: localStorage.getItem('anthropic_key') || ''
+  anthropicKey: localStorage.getItem('anthropic_key') || '',
+  elevenlabsKey: localStorage.getItem('elevenlabs_key') || '',
+  autoTTS: localStorage.getItem('auto_tts') === '1',
+  enableExpressions: localStorage.getItem('enable_expressions') === '1',
+  enablePhotos: localStorage.getItem('enable_photos') === '1'
 };
+
+const IMAGE_GEN_MODEL = 'google/gemini-2.5-flash-image-preview';
+const EXPRESSIONS = ['happy', 'shy', 'angry', 'surprised'];
+const EXPRESSION_LABEL = { happy: '開心', shy: '臉紅', angry: '生氣', surprised: '驚訝' };
 
 // ============================================
 // DOM
@@ -1464,9 +1624,19 @@ const openrouterKeyInput = $('openrouter-key');
 const openrouterModelSelect = $('openrouter-model');
 const autoFallbackInput = $('auto-fallback');
 const anthropicKeyInput = $('anthropic-key');
+const elevenlabsKeyInput = $('elevenlabs-key');
+const autoTTSInput = $('auto-tts');
+const enableExpressionsInput = $('enable-expressions');
+const enablePhotosInput = $('enable-photos');
 const chatAvatar = $('chat-avatar');
 const chatName = $('chat-name');
 const chatStatus = $('chat-status');
+const exprBtn = $('expr-btn');
+const exprModal = $('expr-modal');
+const exprGrid = $('expr-grid');
+const exprStatus = $('expr-status');
+const exprCloseBtn = $('expr-close');
+const exprGenAllBtn = $('expr-gen-all');
 
 // ============================================
 // 取得目前角色
@@ -1496,7 +1666,251 @@ function avatarHTML(char) {
   const onerror = fallback
     ? `if(this.dataset.fb)return;this.dataset.fb=1;this.src='${fallback}'`
     : `this.style.display='none'`;
-  return `<img src="${local}" alt="${char.name}" onload="this.classList.add('loaded')" onerror="${onerror}"><span class="avatar-letter">${char.avatarLetter}</span>`;
+  return `<img class="avatar-img" src="${local}" alt="${char.name}" onload="this.classList.add('loaded')" onerror="${onerror}"><span class="avatar-letter">${char.avatarLetter}</span><div class="avatar-blink"></div><div class="avatar-blush"></div>`;
+}
+
+// ============================================
+// 大頭貼表情圖（AI 生成，依情緒切換）
+// ============================================
+function exprKey(charId, mood) { return `expr_${charId}_${mood}`; }
+
+function getExpressionImage(charId, mood) {
+  try { return localStorage.getItem(exprKey(charId, mood)) || null; } catch (e) { return null; }
+}
+
+function setExpressionImage(charId, mood, dataUrl) {
+  try { localStorage.setItem(exprKey(charId, mood), dataUrl); return true; }
+  catch (e) { return false; }
+}
+
+function clearExpressionImage(charId, mood) {
+  try { localStorage.removeItem(exprKey(charId, mood)); } catch (e) {}
+}
+
+const avatarBase64Cache = new Map();
+async function localAvatarAsDataUrl(char) {
+  if (avatarBase64Cache.has(char.id)) return avatarBase64Cache.get(char.id);
+  const res = await fetch(characterAvatarUrl(char));
+  if (!res.ok) throw new Error('無法讀取本地頭貼圖');
+  const blob = await res.blob();
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+  avatarBase64Cache.set(char.id, dataUrl);
+  return dataUrl;
+}
+
+async function generateExpressionImage(char, mood) {
+  if (!config.openrouterKey) throw new Error('需要先在設定填入 OpenRouter API Key');
+  const moodPromptMap = {
+    happy: '開心微笑，眼神溫柔上揚的表情',
+    shy: '臉頰泛紅、害羞低頭偏移視線的表情',
+    angry: '生氣皺眉、不悅瞪視的表情',
+    surprised: '驚訝睜大眼睛、微張嘴的表情'
+  };
+  const refDataUrl = await localAvatarAsDataUrl(char);
+  const prompt = `這是同一個角色的頭像參考圖。請保持完全相同的臉部特徵、髮型、服裝與畫風，只改變表情為：${moodPromptMap[mood]}。${char.avatarPrompt || ''} 輸出正方形大頭貼構圖。`;
+  const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + config.openrouterKey,
+      'HTTP-Referer': window.location.origin,
+      'X-Title': 'Lil Talk'
+    },
+    body: JSON.stringify({
+      model: IMAGE_GEN_MODEL,
+      modalities: ['image', 'text'],
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: refDataUrl } }
+        ]
+      }]
+    })
+  }, 45000);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error?.message || `圖片生成失敗 HTTP ${res.status}`);
+  const img = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  if (!img) throw new Error('圖片生成失敗：模型未回傳圖片');
+  setExpressionImage(char.id, mood, img);
+  return img;
+}
+
+function applyMoodToAvatar(containerEl, char, mood) {
+  if (!containerEl) return;
+  EXPRESSIONS.forEach(m => containerEl.classList.remove('mood-' + m));
+  const img = containerEl.querySelector('.avatar-img');
+  if (!img) return;
+  if (mood && EXPRESSIONS.includes(mood) && config.enableExpressions) {
+    const cached = getExpressionImage(char.id, mood);
+    if (cached) {
+      containerEl.classList.add('mood-' + mood);
+      img.classList.remove('loaded');
+      img.src = cached;
+      img.onload = () => img.classList.add('loaded');
+      return;
+    }
+  }
+  img.src = characterAvatarUrl(char);
+}
+
+// ============================================
+// 自拍 / 劇情照片
+// ============================================
+const photoGenInFlight = new Set();
+
+async function generateScenePhoto(char, sceneDesc) {
+  if (!config.openrouterKey) throw new Error('需要先在設定填入 OpenRouter API Key');
+  const refDataUrl = await localAvatarAsDataUrl(char);
+  const prompt = `這是同一個角色的頭像參考圖，請保持完全相同的臉部特徵與身份。生成一張這個角色傳給對方的生活照／自拍照，情境是：${sceneDesc}。風格自然、像手機隨手拍的照片，不要太精緻或擺拍感。`;
+  const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + config.openrouterKey,
+      'HTTP-Referer': window.location.origin,
+      'X-Title': 'Lil Talk'
+    },
+    body: JSON.stringify({
+      model: IMAGE_GEN_MODEL,
+      modalities: ['image', 'text'],
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: refDataUrl } }
+        ]
+      }]
+    })
+  }, 45000);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error?.message || `照片生成失敗 HTTP ${res.status}`);
+  const img = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  if (!img) throw new Error('照片生成失敗：模型未回傳圖片');
+  return img;
+}
+
+function renderPhotoBubble(el, msg, msgIndex) {
+  el.className = 'bubble photo-bubble';
+  if (msg.photoUrl) {
+    el.innerHTML = `<img src="${msg.photoUrl}" alt="照片">`;
+    return;
+  }
+
+  if (msg.photoFailed) {
+    el.innerHTML = `<span style="font-size:12px;color:#999;">📷 照片生成失敗</span> <button class="photo-retry-btn" type="button">🔄 重試</button>`;
+    el.querySelector('.photo-retry-btn').addEventListener('click', () => {
+      msg.photoFailed = false;
+      renderPhotoBubble(el, msg, msgIndex);
+    });
+    return;
+  }
+
+  el.classList.add('loading');
+  el.innerHTML = `<span class="photo-spinner"></span><span>正在傳送照片…</span>`;
+
+  if (!config.enablePhotos || !config.openrouterKey) {
+    el.innerHTML = `<span>📷 ${msg.photoPrompt}</span>`;
+    return;
+  }
+  if (photoGenInFlight.has(msgIndex)) {
+    return;
+  }
+  photoGenInFlight.add(msgIndex);
+  const char = currentCharacter();
+  generateScenePhoto(char, msg.photoPrompt).then(dataUrl => {
+    msg.photoUrl = dataUrl;
+    el.classList.remove('loading');
+    el.innerHTML = `<img src="${dataUrl}" alt="照片">`;
+    saveHistoryForCharacter(char.id);
+  }).catch(err => {
+    msg.photoFailed = true;
+    el.classList.remove('loading');
+    el.innerHTML = `<span style="font-size:12px;color:#999;">📷 照片生成失敗（${err.message}）</span> <button class="photo-retry-btn" type="button">🔄 重試</button>`;
+    el.querySelector('.photo-retry-btn').addEventListener('click', () => {
+      msg.photoFailed = false;
+      renderPhotoBubble(el, msg, msgIndex);
+    });
+    saveHistoryForCharacter(char.id);
+  }).finally(() => {
+    photoGenInFlight.delete(msgIndex);
+  });
+}
+
+// ============================================
+// 語音回覆（ElevenLabs TTS）
+// ============================================
+const ttsAudioCache = new Map();
+let currentTTSAudio = null;
+
+function extractDialogue(text) {
+  const matches = [...(text || '').matchAll(/\*\*([^*]+)\*\*/g)].map(m => m[1].trim());
+  return matches.join('。');
+}
+
+async function speakMessage(msgIndex, btnEl, rowEl) {
+  if (!config.elevenlabsKey) {
+    showError('請先在設定填入 ElevenLabs API Key 才能使用語音回覆');
+    return;
+  }
+  const char = currentCharacter();
+  const msg = state.messages[msgIndex];
+  if (!char || !msg) return;
+  const dialogue = extractDialogue(msg.content) || msg.content;
+  if (!dialogue.trim()) return;
+
+  if (currentTTSAudio) { currentTTSAudio.pause(); currentTTSAudio = null; }
+  document.querySelectorAll('.avatar.talking').forEach(el => el.classList.remove('talking'));
+  document.querySelectorAll('.msg-tts-btn.playing').forEach(el => { el.classList.remove('playing'); el.textContent = '🔊 播放'; });
+
+  try {
+    let audioUrl = ttsAudioCache.get(msgIndex);
+    if (!audioUrl) {
+      if (btnEl) btnEl.textContent = '⏳ 生成中';
+      const voiceId = char.voiceId;
+      const res = await fetchWithTimeout(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'xi-api-key': config.elevenlabsKey },
+        body: JSON.stringify({
+          text: dialogue,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: { stability: 0.4, similarity_boost: 0.8 }
+        })
+      }, 30000);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail?.message || `語音生成失敗 HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      audioUrl = URL.createObjectURL(blob);
+      ttsAudioCache.set(msgIndex, audioUrl);
+    }
+
+    const audio = new Audio(audioUrl);
+    currentTTSAudio = audio;
+    const av = rowEl ? rowEl.querySelector('.message-avatar') : null;
+    audio.addEventListener('play', () => {
+      if (btnEl) { btnEl.classList.add('playing'); btnEl.textContent = '⏸ 播放中'; }
+      if (av) av.classList.add('talking');
+      chatAvatar.classList.add('talking');
+    });
+    const stop = () => {
+      if (btnEl) { btnEl.classList.remove('playing'); btnEl.textContent = '🔊 播放'; }
+      if (av) av.classList.remove('talking');
+      chatAvatar.classList.remove('talking');
+    };
+    audio.addEventListener('ended', stop);
+    audio.addEventListener('pause', stop);
+    await audio.play();
+  } catch (err) {
+    if (btnEl) btnEl.textContent = '🔊 播放';
+    showError(err.message);
+  }
 }
 
 // ============================================
@@ -1670,6 +2084,8 @@ function renderCharacterList() {
 // 視圖切換
 // ============================================
 function showHome() {
+  if (currentTTSAudio) { currentTTSAudio.pause(); currentTTSAudio = null; }
+  ttsAudioCache.clear();
   state.currentCharId = null;
   state.messages = [];
   renderCharacterList();
@@ -1688,6 +2104,7 @@ function openChat(charId) {
   loadHistoryForCharacter(charId);
 
   // 更新 header
+  chatAvatar.className = 'avatar online';
   chatAvatar.innerHTML = avatarHTML(char);
   chatAvatar.style.background = char.avatarGradient;
   chatName.textContent = char.name;
@@ -1935,6 +2352,8 @@ function renderMessage(msg, animate = true, msgIndex = undefined) {
     av.style.background = char.avatarGradient;
     av.innerHTML = avatarHTML(char);
     row.appendChild(av);
+    applyMoodToAvatar(av, char, msg.mood);
+    if (msg.mood && EXPRESSIONS.includes(msg.mood)) applyMoodToAvatar(chatAvatar, char, msg.mood);
   }
 
   const bubble = document.createElement('div');
@@ -1947,10 +2366,29 @@ function renderMessage(msg, animate = true, msgIndex = undefined) {
     editBtn.textContent = '✏ 編輯';
     editBtn.addEventListener('click', e => { e.stopPropagation(); startEditMessage(msgIndex); });
     bubble.appendChild(editBtn);
+
+    const ttsBtn = document.createElement('button');
+    ttsBtn.className = 'msg-tts-btn';
+    ttsBtn.textContent = '🔊 播放';
+    ttsBtn.addEventListener('click', e => { e.stopPropagation(); speakMessage(msgIndex, ttsBtn, row); });
+    bubble.appendChild(ttsBtn);
   }
 
   row.appendChild(bubble);
   wrapper.appendChild(row);
+
+  if (msg.role === 'assistant' && msg.photoPrompt) {
+    const photoRow = document.createElement('div');
+    photoRow.className = 'message-row';
+    const spacer = document.createElement('div');
+    spacer.className = 'message-avatar';
+    photoRow.appendChild(spacer);
+    const photoBubble = document.createElement('div');
+    photoRow.appendChild(photoBubble);
+    wrapper.appendChild(photoRow);
+    renderPhotoBubble(photoBubble, msg, msgIndex);
+  }
+
   if (msg.ts) {
     const timeEl = document.createElement('div');
     timeEl.className = 'msg-time';
@@ -2098,8 +2536,14 @@ async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT) {
 }
 
 // 建構送給 API 的 messages：永遠保留第一條（劇情背景）+ 最近 N 條
+const MOOD_RULE = '\n\n【表情標記・內部使用】在回應的最開頭加上情緒標記，格式固定為 [mood:xxx]，xxx 必須是 neutral、happy、shy、angry、surprised 其中一個，依角色當下最貼切的情緒選擇。這個標記只給系統判讀，不會顯示給玩家，禁止省略。';
+const PHOTO_RULE = '\n\n【傳照片・內部使用】只有在玩家明確要求看照片/自拍，或劇情非常自然會這麼做時（例如玩家問「在幹嘛」「傳張照片看看」），才在回應的最後加上 [photo: 簡短情境描述] 標記（例如 [photo: 剛洗完澡，頭髮濕濕的]），用來生成一張符合情境的照片。不要每次都加，只有真正合理時才使用，這個標記不會顯示給玩家看。';
+
 function buildAPIMessages(systemPrompt, limit) {
   const richRule = '\n\n【台詞規則・最高優先】角色說出口的話（**粗體**）是回應的核心。每次必須說至少 3-4 句完整台詞，每句台詞至少 10 個字，要有情緒、有性格、有話中話——可以是反問、試探、發洩、帶刺的關心、欲言又止。動作描寫（*斜體*）點到為止，不超過 2 句，只用來烘托台詞的氛圍。禁止用沉默、省略號或一兩個字代替台詞。';
+  let metaRule = '';
+  if (config.enableExpressions) metaRule += MOOD_RULE;
+  if (config.enablePhotos) metaRule += PHOTO_RULE;
   const msgs = state.messages;
   let history;
   if (!limit || msgs.length <= limit) {
@@ -2108,7 +2552,21 @@ function buildAPIMessages(systemPrompt, limit) {
     // 保留 msgs[0] (劇情背景) + 最近 (limit-1) 條
     history = [msgs[0], ...msgs.slice(-(limit - 1))];
   }
-  return [{ role: 'system', content: systemPrompt + richRule }, ...history];
+  return [{ role: 'system', content: systemPrompt + richRule + metaRule }, ...history];
+}
+
+// 從 AI 回覆中抽出 [mood:xxx] 與 [photo:...] 標記，回傳清理後文字與資料
+function extractMeta(text) {
+  let t = text || '';
+  let mood = null;
+  let photoPrompt = null;
+  const moodMatch = t.match(/\[mood:\s*(neutral|happy|shy|angry|surprised)\s*\]/i);
+  if (moodMatch) mood = moodMatch[1].toLowerCase();
+  t = t.replace(/\[mood:\s*\w+\s*\]/gi, '');
+  const photoMatch = t.match(/\[photo:\s*([^\]]{2,200})\]/i);
+  if (photoMatch) photoPrompt = photoMatch[1].trim();
+  t = t.replace(/\[photo:\s*[^\]]*\]/gi, '');
+  return { text: t.trim(), mood, photoPrompt };
 }
 
 async function callPollinations(systemPrompt, userMessage) {
@@ -2842,12 +3300,20 @@ async function regenerateLast() {
   setLoading(true);
   showTyping();
   try {
-    const reply = fixResponseFormat(await callAI(char.systemPrompt, lastUserContent));
+    const rawReply = await callAI(char.systemPrompt, lastUserContent);
+    const meta = extractMeta(rawReply);
+    const reply = fixResponseFormat(toTraditional(meta.text));
     removeTyping();
-    const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), mood: meta.mood, photoPrompt: meta.photoPrompt };
     state.messages.push(botMsg);
-    renderMessage(botMsg, true, state.messages.length - 1); scrollToBottom();
+    const idx = state.messages.length - 1;
+    renderMessage(botMsg, true, idx); scrollToBottom();
     saveHistoryForCharacter(char.id);
+    if (config.autoTTS && config.elevenlabsKey) {
+      const row = messagesEl.querySelector(`[data-msg-index="${idx}"] .message-row`);
+      const btn = row ? row.querySelector('.msg-tts-btn') : null;
+      speakMessage(idx, btn, row);
+    }
   } catch (err) {
     removeTyping();
     showError(friendlyError(err.message));
@@ -2935,15 +3401,23 @@ async function sendMessage(rawText) {
 
   try {
     const rawReply = await callAI(char.systemPrompt, processed);
-    // 簡轉繁雙保險 + 格式後處理
-    const reply = fixResponseFormat(toTraditional(rawReply));
+    // 抽出表情/照片標記 + 簡轉繁雙保險 + 格式後處理
+    const meta = extractMeta(rawReply);
+    const reply = fixResponseFormat(toTraditional(meta.text));
     removeTyping();
 
-    const botMsg = { role: 'assistant', content: reply, ts: Date.now() };
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), mood: meta.mood, photoPrompt: meta.photoPrompt };
     state.messages.push(botMsg);
-    renderMessage(botMsg, true, state.messages.length - 1);
+    const idx = state.messages.length - 1;
+    renderMessage(botMsg, true, idx);
     scrollToBottom();
     saveHistoryForCharacter(char.id);
+
+    if (config.autoTTS && config.elevenlabsKey) {
+      const row = messagesEl.querySelector(`[data-msg-index="${idx}"] .message-row`);
+      const btn = row ? row.querySelector('.msg-tts-btn') : null;
+      speakMessage(idx, btn, row);
+    }
 
     // 記錄最後互動時間（用於主頁排序）
     setLastChatTime(char.id);
@@ -3019,12 +3493,83 @@ function updateProviderUI() {
   }
 }
 
+// ============================================
+// 表情圖管理 Modal
+// ============================================
+function openExprModal() {
+  const char = currentCharacter();
+  if (!char) return;
+  renderExprGrid(char);
+  exprStatus.textContent = '';
+  exprModal.classList.add('show');
+}
+
+function renderExprGrid(char) {
+  exprGrid.innerHTML = '';
+  EXPRESSIONS.forEach(mood => {
+    const cell = document.createElement('div');
+    cell.style.cssText = 'border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:8px;text-align:center;';
+    const cached = getExpressionImage(char.id, mood);
+    const thumb = document.createElement('div');
+    thumb.style.cssText = 'width:100%;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#F0F2F5;margin-bottom:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#999;';
+    thumb.innerHTML = cached ? `<img src="${cached}" style="width:100%;height:100%;object-fit:cover;">` : '尚未生成';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:12px;margin-bottom:6px;';
+    label.textContent = EXPRESSION_LABEL[mood];
+    const btn = document.createElement('button');
+    btn.className = 'btn-secondary';
+    btn.style.cssText = 'width:100%;padding:6px;font-size:12px;';
+    btn.textContent = cached ? '↺ 重新生成' : '✨ 生成';
+    btn.onclick = () => generateOneExpression(char, mood, cell, btn);
+    cell.appendChild(thumb);
+    cell.appendChild(label);
+    cell.appendChild(btn);
+    exprGrid.appendChild(cell);
+  });
+}
+
+async function generateOneExpression(char, mood, cell, btn) {
+  btn.disabled = true;
+  btn.textContent = '生成中…';
+  exprStatus.textContent = `正在生成「${EXPRESSION_LABEL[mood]}」表情…`;
+  try {
+    await generateExpressionImage(char, mood);
+    renderExprGrid(char);
+    exprStatus.textContent = `「${EXPRESSION_LABEL[mood]}」生成完成`;
+  } catch (err) {
+    exprStatus.textContent = `失敗：${err.message}`;
+    btn.disabled = false;
+    btn.textContent = '✨ 生成';
+  }
+}
+
+async function generateAllExpressions() {
+  const char = currentCharacter();
+  if (!char) return;
+  exprGenAllBtn.disabled = true;
+  for (const mood of EXPRESSIONS) {
+    exprStatus.textContent = `正在生成「${EXPRESSION_LABEL[mood]}」表情…（${EXPRESSIONS.indexOf(mood) + 1}/${EXPRESSIONS.length}）`;
+    try {
+      await generateExpressionImage(char, mood);
+      renderExprGrid(char);
+    } catch (err) {
+      exprStatus.textContent = `「${EXPRESSION_LABEL[mood]}」失敗：${err.message}`;
+    }
+  }
+  exprStatus.textContent = '全部完成';
+  exprGenAllBtn.disabled = false;
+}
+
 function openSettings() {
   providerSelect.value = config.provider;
   openrouterKeyInput.value = config.openrouterKey;
   openrouterModelSelect.value = config.openrouterModel;
   autoFallbackInput.checked = config.autoFallback;
   anthropicKeyInput.value = config.anthropicKey;
+  elevenlabsKeyInput.value = config.elevenlabsKey;
+  autoTTSInput.checked = config.autoTTS;
+  enableExpressionsInput.checked = config.enableExpressions;
+  enablePhotosInput.checked = config.enablePhotos;
   updateProviderUI();
   settingsModal.classList.add('show');
 }
@@ -3035,12 +3580,20 @@ function saveSettings() {
   config.openrouterModel = openrouterModelSelect.value;
   config.autoFallback = autoFallbackInput.checked;
   config.anthropicKey = anthropicKeyInput.value.trim();
+  config.elevenlabsKey = elevenlabsKeyInput.value.trim();
+  config.autoTTS = autoTTSInput.checked;
+  config.enableExpressions = enableExpressionsInput.checked;
+  config.enablePhotos = enablePhotosInput.checked;
 
   localStorage.setItem('provider', config.provider);
   localStorage.setItem('openrouter_key', config.openrouterKey);
   localStorage.setItem('openrouter_model', config.openrouterModel);
   localStorage.setItem('auto_fallback', config.autoFallback ? '1' : '0');
   localStorage.setItem('anthropic_key', config.anthropicKey);
+  localStorage.setItem('elevenlabs_key', config.elevenlabsKey);
+  localStorage.setItem('auto_tts', config.autoTTS ? '1' : '0');
+  localStorage.setItem('enable_expressions', config.enableExpressions ? '1' : '0');
+  localStorage.setItem('enable_photos', config.enablePhotos ? '1' : '0');
 
   updateStatus();
   settingsModal.classList.remove('show');
@@ -3079,6 +3632,12 @@ $('modal-save').addEventListener('click', saveSettings);
 providerSelect.addEventListener('change', updateProviderUI);
 settingsModal.addEventListener('click', (e) => {
   if (e.target === settingsModal) settingsModal.classList.remove('show');
+});
+exprBtn.addEventListener('click', openExprModal);
+exprCloseBtn.addEventListener('click', () => exprModal.classList.remove('show'));
+exprGenAllBtn.addEventListener('click', () => generateAllExpressions());
+exprModal.addEventListener('click', (e) => {
+  if (e.target === exprModal) exprModal.classList.remove('show');
 });
 $('regen-btn').addEventListener('click', regenerateLast);
 $('delete-btn').addEventListener('click', deleteLastBotMsg);
