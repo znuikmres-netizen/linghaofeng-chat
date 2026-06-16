@@ -2291,6 +2291,23 @@ function extractMeta(text) {
   return { text: t.trim(), photoPrompt };
 }
 
+// 用戶端保險：偵測玩家是否在要求照片（即使 AI 沒輸出 [photo:] 標記也能觸發）
+function detectPhotoRequest(text) {
+  return /(自拍|拍.{0,2}照|拍一張|拍張|傳.{0,4}照片|傳.{0,4}相片|看.{0,4}照片|看.{0,4}長相|長什麼樣|長怎樣|你.{0,3}樣子|現在.{0,3}樣子|在幹嘛|在幹什麼|在做什麼|穿什麼|給我看看你|想看你)/.test(text || '');
+}
+
+// 依對話情境推測自拍場景描述
+function guessPhotoScene(userText, replyText) {
+  const t = (userText || '') + ' ' + (replyText || '');
+  if (/健身|運動|重訓|跑步|流汗/.test(t)) return '剛運動完，在健身房的自拍，微微流汗';
+  if (/洗澡|沐浴|淋浴/.test(t)) return '剛洗完澡，頭髮還微濕的隨手自拍';
+  if (/吃|餐|飯|咖啡|喝/.test(t)) return '正在用餐或喝東西的生活照';
+  if (/睡|床|晚安|躺/.test(t)) return '躺在床上的隨手自拍';
+  if (/出門|外面|街|逛|車|路上/.test(t)) return '在外面街頭的隨手自拍';
+  if (/工作|公司|辦公|加班/.test(t)) return '在辦公室工作中的隨手自拍';
+  return '自然的生活自拍照，看著鏡頭';
+}
+
 async function callPollinations(systemPrompt, userMessage) {
   const tried = [];
   const models = ['openai-large', 'openai', 'mistral'];  // openai-large 最快最穩，mistral 作為最後備援
@@ -3026,7 +3043,11 @@ async function regenerateLast() {
     const meta = extractMeta(rawReply);
     const reply = fixResponseFormat(toTraditional(meta.text));
     removeTyping();
-    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), photoPrompt: meta.photoPrompt };
+    let photoPrompt = meta.photoPrompt;
+    if (!photoPrompt && config.enablePhotos && detectPhotoRequest(lastUserContent)) {
+      photoPrompt = guessPhotoScene(lastUserContent, meta.text);
+    }
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), photoPrompt };
     state.messages.push(botMsg);
     const idx = state.messages.length - 1;
     renderMessage(botMsg, true, idx); scrollToBottom();
@@ -3123,7 +3144,11 @@ async function sendMessage(rawText) {
     const reply = fixResponseFormat(toTraditional(meta.text));
     removeTyping();
 
-    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), photoPrompt: meta.photoPrompt };
+    let photoPrompt = meta.photoPrompt;
+    if (!photoPrompt && config.enablePhotos && detectPhotoRequest(processed)) {
+      photoPrompt = guessPhotoScene(processed, meta.text);
+    }
+    const botMsg = { role: 'assistant', content: reply, ts: Date.now(), photoPrompt };
     state.messages.push(botMsg);
     const idx = state.messages.length - 1;
     renderMessage(botMsg, true, idx);
