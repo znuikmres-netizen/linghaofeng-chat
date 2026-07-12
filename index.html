@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Lil Talk</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00A884">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lil Talk">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="icon" type="image/png" href="assets/icon-192.png">
 <style>
   * {
     margin: 0;
@@ -463,7 +471,11 @@
   }
   .message.bot.editing .message-row { max-width: 96%; }
   .message.user .message-row { flex-direction: row-reverse; }
+  /* 多氣泡連發：同一則回覆的第 2+ 顆氣泡 */
+  .message .message-row + .message-row { margin-top: 5px; }
+  .message-row.bubble-pop { animation: fadeInUp 0.25s ease; }
 
+  .message-avatar.avatar-spacer { width: 42px; height: 1px; }
   .message-avatar {
     width: 32px;
     height: 32px;
@@ -1604,10 +1616,78 @@ async function generateScenePhoto(char, sceneDesc) {
   return img;
 }
 
+// ============================================
+// IndexedDB 照片儲存
+// localStorage 只有約 5MB，base64 照片一張就 1-2MB，
+// 必須存 IndexedDB，聊天記錄裡只留 photoId 索引。
+// ============================================
+const photoMemCache = new Map();
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('liltalk-photos', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('photos');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSetPhoto(id, dataUrl) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('photos', 'readwrite');
+    tx.objectStore('photos').put(dataUrl, id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGetPhoto(id) {
+  if (photoMemCache.has(id)) return photoMemCache.get(id);
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const rq = db.transaction('photos', 'readonly').objectStore('photos').get(id);
+    rq.onsuccess = () => {
+      if (rq.result) photoMemCache.set(id, rq.result);
+      resolve(rq.result || null);
+    };
+    rq.onerror = () => reject(rq.error);
+  });
+}
+
+function newPhotoId() {
+  return 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+}
+
+function storePhotoOnMsg(msg, dataUrl, charId) {
+  const id = newPhotoId();
+  photoMemCache.set(id, dataUrl);
+  msg.photoId = id;
+  delete msg.photoUrl;
+  idbSetPhoto(id, dataUrl).catch(() => {});
+  saveHistoryForCharacter(charId);
+}
+
 function renderPhotoBubble(el, msg, msgIndex) {
   el.className = 'bubble photo-bubble';
+
+  // 已有照片：從 IndexedDB 讀
+  if (msg.photoId) {
+    el.innerHTML = `<span class="photo-spinner"></span>`;
+    idbGetPhoto(msg.photoId).then(dataUrl => {
+      el.innerHTML = dataUrl
+        ? `<img src="${dataUrl}" alt="照片">`
+        : `<span style="font-size:12px;color:#999;">📷 照片已不存在</span>`;
+    }).catch(() => {
+      el.innerHTML = `<span style="font-size:12px;color:#999;">📷 照片讀取失敗</span>`;
+    });
+    return;
+  }
+
+  // 舊版資料遷移：base64 直接存在訊息裡 → 搬進 IndexedDB
   if (msg.photoUrl) {
     el.innerHTML = `<img src="${msg.photoUrl}" alt="照片">`;
+    storePhotoOnMsg(msg, msg.photoUrl, state.currentCharId);
     return;
   }
 
@@ -1633,10 +1713,9 @@ function renderPhotoBubble(el, msg, msgIndex) {
   photoGenInFlight.add(msgIndex);
   const char = currentCharacter();
   generateScenePhoto(char, msg.photoPrompt).then(dataUrl => {
-    msg.photoUrl = dataUrl;
     el.classList.remove('loading');
     el.innerHTML = `<img src="${dataUrl}" alt="照片">`;
-    saveHistoryForCharacter(char.id);
+    storePhotoOnMsg(msg, dataUrl, char.id);
   }).catch(err => {
     msg.photoFailed = true;
     el.classList.remove('loading');
@@ -2072,58 +2151,134 @@ function formatMessage(text) {
   return t;
 }
 
+// 把一則回覆拆成多顆氣泡（依空行分段；結尾狀態欄獨立成最後一顆）
+function splitIntoBubbles(text) {
+  const t = (text || '').trim();
+  let main = t, status = null;
+  const sep = t.match(/^[─\-]{4,}\s*$/m);
+  if (sep) {
+    const i = t.indexOf(sep[0]);
+    main = t.slice(0, i).trim();
+    status = t.slice(i).trim();
+  }
+  const paras = main.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+  const bubbles = [];
+  for (const p of paras) {
+    // 每個段落一顆氣泡（短台詞獨立成訊息才像真人）；最多 5 顆，超過併入最後一顆
+    if (bubbles.length >= 5) {
+      bubbles[bubbles.length - 1] += '\n\n' + p;
+    } else {
+      bubbles.push(p);
+    }
+  }
+  if (!bubbles.length && main) bubbles.push(main);
+  if (status) bubbles.push(status);
+  return bubbles.length ? bubbles : [t];
+}
+
 function renderMessage(msg, animate = true, msgIndex = undefined) {
   const char = currentCharacter();
   const wrapper = document.createElement('div');
   wrapper.className = 'message ' + (msg.role === 'user' ? 'user' : 'bot');
   if (!animate) wrapper.style.animation = 'none';
   if (msgIndex !== undefined) wrapper.dataset.msgIndex = msgIndex;
+  messagesEl.appendChild(wrapper);
 
-  const row = document.createElement('div');
-  row.className = 'message-row';
-
-  if (msg.role === 'assistant') {
-    const av = document.createElement('div');
-    av.className = 'message-avatar avatar';
-    av.style.background = char.avatarGradient;
-    av.innerHTML = avatarHTML(char);
-    row.appendChild(av);
-  }
-
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble';
-  bubble.innerHTML = formatMessage(msg.content);
-
-  if (msg.role === 'assistant' && msgIndex !== undefined) {
-    const editBtn = document.createElement('button');
-    editBtn.className = 'msg-edit-btn';
-    editBtn.textContent = '✏ 編輯';
-    editBtn.addEventListener('click', e => { e.stopPropagation(); startEditMessage(msgIndex); });
-    bubble.appendChild(editBtn);
-  }
-
-  row.appendChild(bubble);
-  wrapper.appendChild(row);
-
-  if (msg.role === 'assistant' && msg.photoPrompt) {
-    const photoRow = document.createElement('div');
-    photoRow.className = 'message-row';
-    const spacer = document.createElement('div');
-    spacer.className = 'message-avatar';
-    photoRow.appendChild(spacer);
-    const photoBubble = document.createElement('div');
-    photoRow.appendChild(photoBubble);
-    wrapper.appendChild(photoRow);
-    renderPhotoBubble(photoBubble, msg, msgIndex);
-  }
-
-  if (msg.ts) {
+  const appendTime = () => {
+    if (!msg.ts) return;
     const timeEl = document.createElement('div');
     timeEl.className = 'msg-time';
     timeEl.textContent = new Date(msg.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
     wrapper.appendChild(timeEl);
+  };
+
+  // ---- 玩家訊息：單顆氣泡 ----
+  if (msg.role !== 'assistant') {
+    const row = document.createElement('div');
+    row.className = 'message-row';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = formatMessage(msg.content);
+    row.appendChild(bubble);
+    wrapper.appendChild(row);
+    appendTime();
+    return;
   }
-  messagesEl.appendChild(wrapper);
+
+  // ---- 角色訊息：拆成多顆氣泡，像真人連續傳訊 ----
+  const bubbles = splitIntoBubbles(msg.content);
+
+  const addBubble = (text, isLast, pop) => {
+    const row = document.createElement('div');
+    row.className = 'message-row' + (pop ? ' bubble-pop' : '');
+    const av = document.createElement('div');
+    if (wrapper.querySelector('.message-row')) {
+      av.className = 'message-avatar avatar-spacer';
+    } else {
+      av.className = 'message-avatar avatar';
+      av.style.background = char.avatarGradient;
+      av.innerHTML = avatarHTML(char);
+    }
+    row.appendChild(av);
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = formatMessage(text);
+    if (isLast && msgIndex !== undefined) {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'msg-edit-btn';
+      editBtn.textContent = '✏ 編輯';
+      editBtn.addEventListener('click', e => { e.stopPropagation(); startEditMessage(msgIndex); });
+      bubble.appendChild(editBtn);
+    }
+    row.appendChild(bubble);
+    wrapper.appendChild(row);
+  };
+
+  const finishExtras = () => {
+    if (msg.photoPrompt || msg.photoId || msg.photoUrl) {
+      const photoRow = document.createElement('div');
+      photoRow.className = 'message-row';
+      const spacer = document.createElement('div');
+      spacer.className = 'message-avatar avatar-spacer';
+      photoRow.appendChild(spacer);
+      const photoBubble = document.createElement('div');
+      photoRow.appendChild(photoBubble);
+      wrapper.appendChild(photoRow);
+      renderPhotoBubble(photoBubble, msg, msgIndex);
+    }
+    appendTime();
+  };
+
+  // 歷史訊息：全部一次呈現，不播動畫
+  if (!animate || bubbles.length === 1) {
+    bubbles.forEach((b, i) => addBubble(b, i === bubbles.length - 1, false));
+    finishExtras();
+    return;
+  }
+
+  // 新訊息：第一顆立刻出現，其餘逐顆彈出、中間顯示打字動畫
+  addBubble(bubbles[0], false, false);
+  scrollToBottom();
+  let i = 1;
+  const next = () => {
+    if (!wrapper.isConnected) return; // 對話已重繪，中止殘留動畫
+    if (i >= bubbles.length) { finishExtras(); scrollToBottom(); return; }
+    const text = bubbles[i];
+    const typingRow = document.createElement('div');
+    typingRow.className = 'message-row';
+    typingRow.innerHTML = `<div class="message-avatar avatar-spacer"></div><div class="typing"><span></span><span></span><span></span></div>`;
+    wrapper.appendChild(typingRow);
+    scrollToBottom();
+    setTimeout(() => {
+      if (!wrapper.isConnected) return;
+      typingRow.remove();
+      addBubble(text, i === bubbles.length - 1, true);
+      scrollToBottom();
+      i++;
+      next();
+    }, Math.min(450 + text.length * 28, 2300));
+  };
+  next();
 }
 
 function renderMessages() {
@@ -2267,7 +2422,11 @@ async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT) {
 const PHOTO_RULE = '\n\n【傳照片・最高優先・必須遵守】這是一個會傳照片的聊天系統。當玩家做出以下任何一種行為時，你【必須】在回應的最後面，獨立一行加上一個 [photo: 簡短情境描述] 標記（用繁體中文描述畫面內容，例如 [photo: 剛洗完澡，頭髮還濕濕的浴室自拍]）：\n- 玩家要求看照片、自拍、你的長相、你穿什麼、你現在的樣子\n- 玩家問你「在幹嘛」「在哪」「在做什麼」之類、用照片回答會更生動的問題\n- 劇情中你正在做某件事（運動、吃飯、出門、在某個場景），適合用照片分享\n這個標記絕對不會顯示給玩家，是系統用來生成照片的指令，所以你只管自然地在台詞裡說「傳給你看」「拍給你」之類，然後務必補上標記。格式必須完全正確：[photo: 內容]，不可省略中括號或冒號。';
 
 function buildAPIMessages(systemPrompt, limit) {
-  const richRule = '\n\n【台詞規則・最高優先】角色說出口的話（**粗體**）是回應的核心。每次必須說至少 3-4 句完整台詞，每句台詞至少 10 個字，要有情緒、有性格、有話中話——可以是反問、試探、發洩、帶刺的關心、欲言又止。動作描寫（*斜體*）點到為止，不超過 2 句，只用來烘托台詞的氛圍。禁止用沉默、省略號或一兩個字代替台詞。';
+  const richRule = '\n\n【台詞規則・最高優先】角色說出口的話（**粗體**）是回應的核心。每次必須說至少 3-4 句完整台詞，要有情緒、有性格、有話中話——可以是反問、試探、發洩、帶刺的關心、欲言又止。動作描寫（*斜體*）點到為止，不超過 2 句，只用來烘托台詞的氛圍。';
+  const liveRule = '\n\n【聊天感規則・同樣最高優先】你是活生生的人在手機上跟她傳訊息，不是在朗誦小說。台詞要像日常說話：長短句交錯，偶爾一句只有兩三個字（「嗯。」「過來。」「想妳了。」），自然使用語氣詞（欸、嘖、喔、啊、哈、齁）。嚴禁 AI 腔：不說「我理解妳的感受」「請放心」「讓我們一起」，不用條列式，不每次都用問句收尾，不複述對方剛說的話。避免每段都用「他」開頭、避免連續相同句式。回覆分成 2-4 個自然段（用空行隔開），每段像一則獨立訊息。';
+  const h = new Date().getHours();
+  const slot = h < 5 ? '深夜' : h < 11 ? '早上' : h < 14 ? '中午' : h < 18 ? '下午' : h < 23 ? '晚上' : '深夜';
+  const timeRule = `\n【現在時間】${slot}（${h} 點）。角色能感知現實時間：深夜會唸她怎麼還不睡、早上會提到剛醒或早餐、用餐時段會問吃了沒。自然帶到就好，不必每次都提。`;
   let metaRule = '';
   if (config.enablePhotos) metaRule += PHOTO_RULE;
   const msgs = state.messages;
@@ -2278,7 +2437,7 @@ function buildAPIMessages(systemPrompt, limit) {
     // 保留 msgs[0] (劇情背景) + 最近 (limit-1) 條
     history = [msgs[0], ...msgs.slice(-(limit - 1))];
   }
-  return [{ role: 'system', content: systemPrompt + richRule + metaRule }, ...history];
+  return [{ role: 'system', content: systemPrompt + richRule + liveRule + timeRule + metaRule }, ...history];
 }
 
 // 從 AI 回覆中抽出 [photo:...] 標記，回傳清理後文字與資料
@@ -3184,9 +3343,23 @@ async function sendMessage(rawText) {
 function historyKey(charId) { return 'chat_history_' + charId; }
 
 function saveHistoryForCharacter(charId) {
+  // photoUrl（base64 大圖）永遠不落 localStorage——照片本體在 IndexedDB
+  const slim = () => JSON.stringify(state.messages.map(m => {
+    if (m.photoUrl) { const { photoUrl, ...rest } = m; return rest; }
+    return m;
+  }));
   try {
-    localStorage.setItem(historyKey(charId), JSON.stringify(state.messages));
-  } catch (e) {}
+    localStorage.setItem(historyKey(charId), slim());
+  } catch (e) {
+    // 容量不足：捨棄最舊的一半訊息再存（保留第一條劇情背景）
+    try {
+      const msgs = state.messages;
+      const keep = [msgs[0], ...msgs.slice(-Math.max(4, Math.floor(msgs.length / 2)))];
+      localStorage.setItem(historyKey(charId), JSON.stringify(keep.map(m => {
+        const { photoUrl, ...rest } = m; return rest;
+      })));
+    } catch (e2) {}
+  }
 }
 
 function loadHistoryForCharacter(charId) {
@@ -3389,6 +3562,13 @@ if (initialHash && CHARACTERS.some(c => c.id === initialHash)) {
   openChat(initialHash);
 } else {
   showHome();
+}
+
+// PWA：註冊 service worker（加到主畫面後可全螢幕、離線開啟）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
 }
 </script>
 </body>
